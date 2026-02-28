@@ -72,8 +72,20 @@ const BADGE_LABELS: Record<string, string> = {
   'mission-starter': 'Gorev Baslangici',
   'mars-collector': 'Mars Koleksiyoncusu',
   'score-500': '500+ Puan',
+  'solar-explorer': 'Gunes Sistemi Kesifcisi',
   'space-marathon': 'Uzay Maratoncusu',
 }
+
+const PLANET_GUIDE: Array<{ id: string; title: string; trait: string }> = [
+  { id: 'mercury', title: 'Merkur', trait: 'Cok hizli, kucuk hedef.' },
+  { id: 'venus', title: 'Venus', trait: 'Kalkan destegi verir.' },
+  { id: 'earth', title: 'Dunya', trait: 'Dengeli puan.' },
+  { id: 'mars', title: 'Mars', trait: 'Kizil gezegen, ekstra puan.' },
+  { id: 'jupiter', title: 'Jupiter', trait: 'Dev firtina, riskli temas.' },
+  { id: 'saturn', title: 'Saturn', trait: 'Halka etkisiyle akisi yavaslatir.' },
+  { id: 'uranus', title: 'Uranus', trait: 'Ekstra can kazandirir.' },
+  { id: 'neptune', title: 'Neptune', trait: 'Combo suresini uzatir.' },
+]
 
 function ControlButton({ label, direction, onPress }: ControlButtonProps) {
   return (
@@ -571,6 +583,23 @@ function App() {
     top: `${game.hazard.y - game.hazard.radius}px`,
   }
 
+  const extraPlanetStyles = useMemo(
+    () =>
+      game.extraPlanets.map((planet) => ({
+        id: planet.id,
+        className: `planet planet--${planet.id} ${planet.impactMs > 0 ? 'planet-impact' : ''} ${
+          planet.visible ? 'opacity-100' : 'opacity-0'
+        }`,
+        style: {
+          width: `${planet.radius * 2}px`,
+          height: `${planet.radius * 2}px`,
+          left: `${planet.x - planet.radius}px`,
+          top: `${planet.y - planet.radius}px`,
+        } as CSSProperties,
+      })),
+    [game.extraPlanets],
+  )
+
   const playerShipClass = [
     'player-ship absolute',
     `player-ship--${game.selectedSkin}`,
@@ -706,9 +735,17 @@ function App() {
 
             <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">
               <h3 className="title-font text-base text-cyan-100">Gezegen Takibi</h3>
-              <p className="mt-2 text-sm text-slate-200">Dunya: {game.planetCatches.earth}</p>
-              <p className="mt-1 text-sm text-slate-200">Mars: {game.planetCatches.mars}</p>
-              <p className="mt-1 text-sm text-slate-200">Gunes: {game.planetCatches.sun}</p>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-slate-200">
+                <p>Merkur: {game.planetCatches.mercury}</p>
+                <p>Venus: {game.planetCatches.venus}</p>
+                <p>Dunya: {game.planetCatches.earth}</p>
+                <p>Mars: {game.planetCatches.mars}</p>
+                <p>Jupiter: {game.planetCatches.jupiter}</p>
+                <p>Saturn: {game.planetCatches.saturn}</p>
+                <p>Uranus: {game.planetCatches.uranus}</p>
+                <p>Neptune: {game.planetCatches.neptune}</p>
+                <p>Gunes: {game.planetCatches.sun}</p>
+              </div>
               {game.learningFact ? (
                 <div className="mt-3 rounded-xl border border-amber-200/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
                   Bilgi: {game.learningFact}
@@ -781,12 +818,16 @@ function App() {
               className={
                 game.hazard.visible
                   ? game.hazard.impactMs > 0
-                    ? 'planet planet--hazard planet-impact opacity-100'
-                    : 'planet planet--hazard opacity-100'
-                  : 'planet planet--hazard opacity-0'
+                    ? 'planet planet--jupiter planet-impact opacity-100'
+                    : 'planet planet--jupiter opacity-100'
+                  : 'planet planet--jupiter opacity-0'
               }
               style={hazardStyle}
             />
+
+            {extraPlanetStyles.map((planet) => (
+              <div key={planet.id} className={planet.className} style={planet.style} />
+            ))}
 
             {game.announcement ? (
               <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-cyan-100/30 bg-slate-950/60 px-4 py-1 text-sm font-semibold tracking-wide text-cyan-100 backdrop-blur animate-pop-note">
@@ -926,6 +967,18 @@ function App() {
               <p className={isTouchDevice ? 'mt-3 text-xs uppercase tracking-[0.18em] text-cyan-100/80' : 'hidden'}>
                 Dokunmatik joystick ekranin altina tasindi.
               </p>
+            </div>
+
+            <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">
+              <h3 className="title-font text-base text-cyan-100">8 Gezegen Ozellikleri</h3>
+              <div className="mt-2 space-y-2">
+                {PLANET_GUIDE.map((planet) => (
+                  <div key={planet.id} className="rounded-xl border border-cyan-200/15 bg-cyan-200/5 px-2.5 py-2">
+                    <p className="text-sm font-semibold text-cyan-100">{planet.title}</p>
+                    <p className="text-xs text-slate-300">{planet.trait}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">

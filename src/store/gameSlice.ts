@@ -55,6 +55,14 @@ type Hazard = DynamicEntity & {
   active: boolean
 }
 
+type ExtraPlanetId = 'mercury' | 'venus' | 'saturn' | 'uranus' | 'neptune'
+
+type ExtraPlanet = DynamicEntity & {
+  id: ExtraPlanetId
+  points: number
+  speedFactor: number
+}
+
 type ParentSettings = {
   soundVolume: number
   vibrationEnabled: boolean
@@ -74,8 +82,14 @@ type MissionState = {
 }
 
 type PlanetCatchStats = {
+  mercury: number
+  venus: number
   earth: number
   mars: number
+  jupiter: number
+  saturn: number
+  uranus: number
+  neptune: number
   sun: number
 }
 
@@ -107,6 +121,13 @@ type DifficultyConfig = {
   baseShieldCharges: number
   hazardUnlockLevel: number
   hazardSpeedMultiplier: number
+  planetSpawnSpeed: number
+  hazardSpawnSpeed: number
+  planetMaxSpeed: number
+  hazardMaxSpeed: number
+  planetLevelBoostPerLevel: number
+  hazardLevelBoostPerLevel: number
+  impactImpulseScale: number
   solarInfluence: number
   levelScoreStep: number
   missionTargetScale: number
@@ -122,9 +143,9 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     idleDamping: 0.92,
     minDriftSpeed: 1,
     playerBounceDamping: 0.94,
-    secondThreshold: 1.8,
-    thirdThreshold: 3,
-    sunThreshold: 4.5,
+    secondThreshold: 0,
+    thirdThreshold: 0,
+    sunThreshold: 0,
     earthPoints: 14,
     marsPoints: 22,
     sunPoints: 110,
@@ -132,7 +153,14 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     baseShieldCharges: 3,
     hazardUnlockLevel: 3,
     hazardSpeedMultiplier: 0.88,
-    solarInfluence: 0.8,
+    planetSpawnSpeed: 1.35,
+    hazardSpawnSpeed: 1.7,
+    planetMaxSpeed: 2.25,
+    hazardMaxSpeed: 2.8,
+    planetLevelBoostPerLevel: 0.018,
+    hazardLevelBoostPerLevel: 0.03,
+    impactImpulseScale: 0.55,
+    solarInfluence: 0.5,
     levelScoreStep: 230,
     missionTargetScale: 0.85,
     missionRewardScale: 1,
@@ -145,9 +173,9 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     idleDamping: 0.9,
     minDriftSpeed: 1.15,
     playerBounceDamping: 0.9,
-    secondThreshold: 2.2,
-    thirdThreshold: 3.5,
-    sunThreshold: 5.2,
+    secondThreshold: 0,
+    thirdThreshold: 0,
+    sunThreshold: 0,
     earthPoints: 16,
     marsPoints: 24,
     sunPoints: 120,
@@ -155,7 +183,14 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     baseShieldCharges: 2,
     hazardUnlockLevel: 2,
     hazardSpeedMultiplier: 1,
-    solarInfluence: 1,
+    planetSpawnSpeed: 1.65,
+    hazardSpawnSpeed: 2.1,
+    planetMaxSpeed: 2.8,
+    hazardMaxSpeed: 3.4,
+    planetLevelBoostPerLevel: 0.022,
+    hazardLevelBoostPerLevel: 0.036,
+    impactImpulseScale: 0.64,
+    solarInfluence: 0.62,
     levelScoreStep: 200,
     missionTargetScale: 1,
     missionRewardScale: 1.12,
@@ -168,9 +203,9 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     idleDamping: 0.88,
     minDriftSpeed: 1.2,
     playerBounceDamping: 0.86,
-    secondThreshold: 2.8,
-    thirdThreshold: 4.2,
-    sunThreshold: 6,
+    secondThreshold: 0,
+    thirdThreshold: 0,
+    sunThreshold: 0,
     earthPoints: 18,
     marsPoints: 30,
     sunPoints: 145,
@@ -178,19 +213,44 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     baseShieldCharges: 1,
     hazardUnlockLevel: 1,
     hazardSpeedMultiplier: 1.2,
-    solarInfluence: 1.2,
+    planetSpawnSpeed: 2.1,
+    hazardSpawnSpeed: 2.7,
+    planetMaxSpeed: 3.5,
+    hazardMaxSpeed: 4.2,
+    planetLevelBoostPerLevel: 0.028,
+    hazardLevelBoostPerLevel: 0.045,
+    impactImpulseScale: 0.74,
+    solarInfluence: 0.8,
     levelScoreStep: 170,
     missionTargetScale: 1.2,
     missionRewardScale: 1.28,
   },
 }
 
-const PLANET_FACTS: Record<'earth' | 'mars' | 'sun' | 'hazard', string> = {
+const PLANET_FACTS: Record<'mercury' | 'venus' | 'earth' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'sun', string> = {
+  mercury: 'Merkur, Gunes Sistemindeki en kucuk ve Gunes\'e en yakin gezegendir.',
+  venus: 'Venus en sicak gezegendir; kalin atmosferi isi hapseder.',
   earth: 'Dunya, yuzeyinde sivisi halde su bulunan tek bilinen gezegendir.',
   mars: 'Mars kizil gorunur; sebebi yuzeyindeki demir oksittir.',
+  jupiter: 'Jupiter en buyuk gezegendir ve Buyuk Kirmizi Leke dev bir firtinadir.',
+  saturn: 'Saturn, buz ve toz parcaciklarindan olusan belirgin halkalara sahiptir.',
+  uranus: 'Uranus neredeyse yana yatmis ekseniyle diger gezegenlerden ayrilir.',
+  neptune: 'Neptune cok uzak ve cok ruzgarli bir buz dev gezegendir.',
   sun: 'Gunes, Gunes Sistemi kutlesinin neredeyse tamamina sahiptir.',
-  hazard: 'Jupiter dev bir gaz gezegenidir ve Buyuk Kirmizi Leke dev bir firtinadir.',
 }
+
+const EXTRA_PLANET_BLUEPRINTS: Array<{
+  id: ExtraPlanetId
+  radius: number
+  points: number
+  speedFactor: number
+}> = [
+  { id: 'mercury', radius: 9, points: 10, speedFactor: 1.35 },
+  { id: 'venus', radius: 14, points: 14, speedFactor: 0.82 },
+  { id: 'saturn', radius: 18, points: 24, speedFactor: 0.96 },
+  { id: 'uranus', radius: 15, points: 18, speedFactor: 0.88 },
+  { id: 'neptune', radius: 16, points: 22, speedFactor: 1.08 },
+]
 
 const MISSION_TEMPLATES: Array<{
   kind: MissionKind
@@ -241,6 +301,7 @@ export type GameState = {
   comet: Collectible
   home: HomePortal
   hazard: Hazard
+  extraPlanets: ExtraPlanet[]
   score: number
   highScore: number
   combo: number
@@ -316,6 +377,7 @@ function createCollectible(
   radius: number,
   width: number,
   height: number,
+  spawnSpeed: number,
 ): Collectible {
   const position = randomPosition(width, height, radius)
 
@@ -323,8 +385,8 @@ function createCollectible(
     id,
     x: position.x,
     y: position.y,
-    vx: randomBetween(-5, 5),
-    vy: randomBetween(-5, 5),
+    vx: randomBetween(-spawnSpeed, spawnSpeed),
+    vy: randomBetween(-spawnSpeed, spawnSpeed),
     radius,
     visible: false,
     cooldownMs: 0,
@@ -349,20 +411,45 @@ function createHome(points: number, threshold: number, width: number, height: nu
   }
 }
 
-function createHazard(width: number, height: number): Hazard {
+function createHazard(width: number, height: number, spawnSpeed: number): Hazard {
   const position = randomPosition(width, height, HAZARD_RADIUS)
 
   return {
     x: position.x,
     y: position.y,
-    vx: randomBetween(-7, 7),
-    vy: randomBetween(-7, 7),
+    vx: randomBetween(-spawnSpeed, spawnSpeed),
+    vy: randomBetween(-spawnSpeed, spawnSpeed),
     radius: HAZARD_RADIUS,
     visible: false,
     cooldownMs: 0,
     impactMs: 0,
     active: false,
   }
+}
+
+function createExtraPlanets(
+  width: number,
+  height: number,
+  baseSpawnSpeed: number,
+): ExtraPlanet[] {
+  return EXTRA_PLANET_BLUEPRINTS.map((planet) => {
+    const position = randomPosition(width, height, planet.radius)
+    const speed = baseSpawnSpeed * planet.speedFactor
+
+    return {
+      id: planet.id,
+      x: position.x,
+      y: position.y,
+      vx: randomBetween(-speed, speed),
+      vy: randomBetween(-speed, speed),
+      radius: planet.radius,
+      visible: true,
+      cooldownMs: 0,
+      impactMs: 0,
+      points: planet.points,
+      speedFactor: planet.speedFactor,
+    }
+  })
 }
 
 function createMission(seed: number, difficulty: Difficulty): MissionState {
@@ -417,10 +504,31 @@ function createInitialState(): GameState {
       cooldownMs: 0,
       impactMs: 0,
     },
-    spark: createCollectible('earth', config.earthPoints, config.secondThreshold, 16, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
-    comet: createCollectible('mars', config.marsPoints, config.thirdThreshold, 13, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
+    spark: createCollectible(
+      'earth',
+      config.earthPoints,
+      config.secondThreshold,
+      16,
+      DEFAULT_ARENA_WIDTH,
+      DEFAULT_ARENA_HEIGHT,
+      config.planetSpawnSpeed,
+    ),
+    comet: createCollectible(
+      'mars',
+      config.marsPoints,
+      config.thirdThreshold,
+      13,
+      DEFAULT_ARENA_WIDTH,
+      DEFAULT_ARENA_HEIGHT,
+      config.planetSpawnSpeed,
+    ),
     home: createHome(config.sunPoints, config.sunThreshold, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
-    hazard: createHazard(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
+    hazard: createHazard(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT, config.hazardSpawnSpeed),
+    extraPlanets: createExtraPlanets(
+      DEFAULT_ARENA_WIDTH,
+      DEFAULT_ARENA_HEIGHT,
+      config.planetSpawnSpeed,
+    ),
     score: 0,
     highScore: loadStoredHighScore(),
     combo: 1,
@@ -440,8 +548,14 @@ function createInitialState(): GameState {
     missionSeed: 0,
     currentMission: createMission(0, difficulty),
     planetCatches: {
+      mercury: 0,
+      venus: 0,
       earth: 0,
       mars: 0,
+      jupiter: 0,
+      saturn: 0,
+      uranus: 0,
+      neptune: 0,
       sun: 0,
     },
     learningFact: '',
@@ -498,7 +612,10 @@ function grantBadge(state: GameState, badgeId: string, message: string) {
   setAnnouncement(state, message, 1700)
 }
 
-function setLearningFact(state: GameState, key: 'earth' | 'mars' | 'sun' | 'hazard') {
+function setLearningFact(
+  state: GameState,
+  key: 'mercury' | 'venus' | 'earth' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'sun',
+) {
   state.learningFact = PLANET_FACTS[key]
   state.learningFactTimerMs = 6200
 }
@@ -538,6 +655,20 @@ function checkUnlocksAndBadges(state: GameState) {
 
   if (state.score >= 500) {
     grantBadge(state, 'score-500', 'Rozet acildi: 500+ Puan')
+  }
+
+  const caughtAllPlanets =
+    state.planetCatches.mercury > 0 &&
+    state.planetCatches.venus > 0 &&
+    state.planetCatches.earth > 0 &&
+    state.planetCatches.mars > 0 &&
+    state.planetCatches.jupiter > 0 &&
+    state.planetCatches.saturn > 0 &&
+    state.planetCatches.uranus > 0 &&
+    state.planetCatches.neptune > 0
+
+  if (caughtAllPlanets) {
+    grantBadge(state, 'solar-explorer', 'Rozet acildi: Gunes Sistemi Kesifcisi')
   }
 
   if (state.sessionElapsedMs >= 3 * 60 * 1000) {
@@ -604,7 +735,22 @@ function collectPoints(state: GameState, points: number, text: string) {
   checkUnlocksAndBadges(state)
 }
 
-function getPlanetSourcePosition(state: GameState, source: 'earth' | 'mars' | 'sun' | 'hazard') {
+type PlanetImpactSource =
+  | 'mercury'
+  | 'venus'
+  | 'earth'
+  | 'mars'
+  | 'jupiter'
+  | 'saturn'
+  | 'uranus'
+  | 'neptune'
+  | 'sun'
+
+function getMovingPlanets(state: GameState) {
+  return [state.spark, state.comet, state.hazard, ...state.extraPlanets]
+}
+
+function getPlanetSourcePosition(state: GameState, source: PlanetImpactSource) {
   if (source === 'earth') {
     return { x: state.spark.x, y: state.spark.y }
   }
@@ -613,14 +759,24 @@ function getPlanetSourcePosition(state: GameState, source: 'earth' | 'mars' | 's
     return { x: state.comet.x, y: state.comet.y }
   }
 
-  if (source === 'hazard') {
+  if (source === 'jupiter') {
     return { x: state.hazard.x, y: state.hazard.y }
   }
 
-  return { x: state.home.x, y: state.home.y }
+  if (source === 'sun') {
+    return { x: state.home.x, y: state.home.y }
+  }
+
+  const planet = state.extraPlanets.find((item) => item.id === source)
+  if (planet) {
+    return { x: planet.x, y: planet.y }
+  }
+
+  return { x: state.player.x, y: state.player.y }
 }
 
-function triggerPlanetImpact(state: GameState, source: 'earth' | 'mars' | 'sun' | 'hazard') {
+function triggerPlanetImpact(state: GameState, source: PlanetImpactSource) {
+  const config = getDifficultyConfig(state.difficulty)
   const sourcePosition = getPlanetSourcePosition(state, source)
   const strongImpact = 420
   const lightImpact = 180
@@ -628,10 +784,13 @@ function triggerPlanetImpact(state: GameState, source: 'earth' | 'mars' | 'sun' 
   state.spark.impactMs = source === 'earth' ? strongImpact : Math.max(state.spark.impactMs, lightImpact)
   state.comet.impactMs = source === 'mars' ? strongImpact : Math.max(state.comet.impactMs, lightImpact)
   state.home.impactMs = source === 'sun' ? strongImpact : Math.max(state.home.impactMs, lightImpact)
-  state.hazard.impactMs = source === 'hazard' ? strongImpact : Math.max(state.hazard.impactMs, lightImpact)
+  state.hazard.impactMs = source === 'jupiter' ? strongImpact : Math.max(state.hazard.impactMs, lightImpact)
+  for (const planet of state.extraPlanets) {
+    planet.impactMs = planet.id === source ? strongImpact : Math.max(planet.impactMs, lightImpact)
+  }
   state.planetChainMs = 220
 
-  const movingBodies = [state.spark, state.comet, state.hazard]
+  const movingBodies = getMovingPlanets(state)
 
   for (const entity of movingBodies) {
     const dx = entity.x - sourcePosition.x
@@ -644,7 +803,8 @@ function triggerPlanetImpact(state: GameState, source: 'earth' | 'mars' | 'sun' 
 
     const nx = dx / distance
     const ny = dy / distance
-    const impulse = Math.max(0.24, 2.8 / Math.max(1, distance / 45))
+    const impulse =
+      Math.max(0.14, 2.1 / Math.max(1, distance / 45)) * config.impactImpulseScale
 
     entity.vx += nx * impulse
     entity.vy += ny * impulse
@@ -653,7 +813,7 @@ function triggerPlanetImpact(state: GameState, source: 'earth' | 'mars' | 'sun' 
 
 function applySolarInfluence(state: GameState, frameScale: number) {
   const config = getDifficultyConfig(state.difficulty)
-  const movingBodies = [state.spark, state.comet, state.hazard]
+  const movingBodies = getMovingPlanets(state)
 
   for (const entity of movingBodies) {
     const dx = state.home.x - entity.x
@@ -666,11 +826,26 @@ function applySolarInfluence(state: GameState, frameScale: number) {
 
     const nx = dx / distance
     const ny = dy / distance
-    const gravity = Math.min(0.38, 2400 / Math.max(900, distance * distance)) * frameScale * config.solarInfluence
+    const gravity =
+      Math.min(0.18, 1600 / Math.max(1100, distance * distance)) *
+      frameScale *
+      config.solarInfluence
 
     entity.vx += nx * gravity
     entity.vy += ny * gravity
   }
+}
+
+function clampVelocity(entity: DynamicEntity, maxSpeed: number) {
+  const speed = Math.hypot(entity.vx, entity.vy)
+
+  if (speed <= maxSpeed || speed <= 0) {
+    return
+  }
+
+  const ratio = maxSpeed / speed
+  entity.vx *= ratio
+  entity.vy *= ratio
 }
 
 function bounceInsideArena(
@@ -749,9 +924,13 @@ function resolvePlanetPair(first: DynamicEntity, second: DynamicEntity) {
 }
 
 function resolvePlanetCollisions(state: GameState) {
-  resolvePlanetPair(state.spark, state.comet)
-  resolvePlanetPair(state.spark, state.hazard)
-  resolvePlanetPair(state.comet, state.hazard)
+  const planets = getMovingPlanets(state)
+
+  for (let firstIndex = 0; firstIndex < planets.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < planets.length; secondIndex += 1) {
+      resolvePlanetPair(planets[firstIndex], planets[secondIndex])
+    }
+  }
 }
 
 function setupRound(state: GameState, message: string) {
@@ -773,10 +952,27 @@ function setupRound(state: GameState, message: string) {
     impactMs: 0,
   }
 
-  state.spark = createCollectible('earth', config.earthPoints, config.secondThreshold, 16, width, height)
-  state.comet = createCollectible('mars', config.marsPoints, config.thirdThreshold, 13, width, height)
+  state.spark = createCollectible(
+    'earth',
+    config.earthPoints,
+    config.secondThreshold,
+    16,
+    width,
+    height,
+    config.planetSpawnSpeed,
+  )
+  state.comet = createCollectible(
+    'mars',
+    config.marsPoints,
+    config.thirdThreshold,
+    13,
+    width,
+    height,
+    config.planetSpawnSpeed,
+  )
   state.home = createHome(config.sunPoints, config.sunThreshold, width, height)
-  state.hazard = createHazard(width, height)
+  state.hazard = createHazard(width, height, config.hazardSpawnSpeed)
+  state.extraPlanets = createExtraPlanets(width, height, config.planetSpawnSpeed)
 
   state.score = 0
   state.combo = 1
@@ -790,6 +986,17 @@ function setupRound(state: GameState, message: string) {
   state.isPaused = false
   state.isGameOver = false
   state.planetChainMs = 0
+  state.planetCatches = {
+    mercury: 0,
+    venus: 0,
+    earth: 0,
+    mars: 0,
+    jupiter: 0,
+    saturn: 0,
+    uranus: 0,
+    neptune: 0,
+    sun: 0,
+  }
 
   state.currentMission = createMission(state.missionSeed + 1, state.difficulty)
   state.missionSeed += 1
@@ -810,16 +1017,13 @@ function moveCollectible(
   collectible: Collectible,
   deltaMs: number,
   frameScale: number,
-  playerSpeed: number,
 ) {
-  collectible.visible = playerSpeed >= collectible.threshold
+  const config = getDifficultyConfig(state.difficulty)
+  collectible.visible = true
 
-  if (!collectible.visible) {
-    collectible.cooldownMs = Math.max(0, collectible.cooldownMs - deltaMs)
-    return
-  }
+  const levelBoost = 0.9 + (state.level - 1) * config.planetLevelBoostPerLevel
 
-  const levelBoost = 1 + (state.level - 1) * 0.08
+  clampVelocity(collectible, config.planetMaxSpeed)
 
   bounceInsideArena(collectible, state.arenaWidth, state.arenaHeight, frameScale * levelBoost)
 
@@ -854,13 +1058,80 @@ function moveCollectible(
   }
 }
 
-function moveHome(state: GameState, deltaMs: number, playerSpeed: number) {
-  state.home.visible = playerSpeed >= state.home.threshold
+function applyExtraPlanetEffect(state: GameState, planet: ExtraPlanet) {
+  const movingBodies = getMovingPlanets(state)
 
-  if (!state.home.visible) {
-    state.home.cooldownMs = Math.max(0, state.home.cooldownMs - deltaMs)
+  if (planet.id === 'mercury') {
+    state.comboTimerMs = Math.max(state.comboTimerMs, COMBO_WINDOW_MS + 500)
+    setAnnouncement(state, 'Merkur: mini hiz ivmesi!', 950)
     return
   }
+
+  if (planet.id === 'venus') {
+    state.shieldCharges = Math.min(5, state.shieldCharges + 1)
+    setAnnouncement(state, 'Venus: kalkan +1', 1100)
+    return
+  }
+
+  if (planet.id === 'saturn') {
+    for (const body of movingBodies) {
+      body.vx *= 0.84
+      body.vy *= 0.84
+    }
+    setAnnouncement(state, 'Saturn halkalari: uzay akisina fren!', 1200)
+    return
+  }
+
+  if (planet.id === 'uranus') {
+    state.lives = Math.min(getDifficultyConfig(state.difficulty).baseLives + 2, state.lives + 1)
+    setAnnouncement(state, 'Uranus: ekstra can +1', 1200)
+    return
+  }
+
+  state.combo = Math.min(9, state.combo + 1)
+  state.comboTimerMs = Math.max(state.comboTimerMs, COMBO_WINDOW_MS + 1000)
+  for (const body of movingBodies) {
+    body.vx *= 1.06
+    body.vy *= 1.06
+  }
+  setAnnouncement(state, 'Neptune: combo uzatildi!', 1150)
+}
+
+function moveExtraPlanets(state: GameState, deltaMs: number, frameScale: number) {
+  const config = getDifficultyConfig(state.difficulty)
+
+  for (const planet of state.extraPlanets) {
+    planet.visible = true
+
+    const levelBoost = 0.88 + (state.level - 1) * config.planetLevelBoostPerLevel
+    clampVelocity(planet, config.planetMaxSpeed * planet.speedFactor)
+    bounceInsideArena(planet, state.arenaWidth, state.arenaHeight, frameScale * levelBoost)
+
+    if (planet.cooldownMs > 0) {
+      planet.cooldownMs = Math.max(0, planet.cooldownMs - deltaMs)
+      continue
+    }
+
+    const hitDistance = state.player.radius + planet.radius
+    if (getDistance(state.player, planet) > hitDistance) {
+      continue
+    }
+
+    collectPoints(state, planet.points * state.combo, `${planet.id.toUpperCase()} yakalandi!`)
+    setLearningFact(state, planet.id)
+    state.planetCatches[planet.id] += 1
+    applyExtraPlanetEffect(state, planet)
+    triggerPlanetImpact(state, planet.id)
+
+    const nextPosition = randomPosition(state.arenaWidth, state.arenaHeight, planet.radius)
+    planet.x = nextPosition.x
+    planet.y = nextPosition.y
+    planet.cooldownMs = 650
+  }
+}
+
+function moveHome(state: GameState, deltaMs: number) {
+  state.home.visible = true
 
   if (state.home.cooldownMs > 0) {
     state.home.cooldownMs = Math.max(0, state.home.cooldownMs - deltaMs)
@@ -888,14 +1159,13 @@ function moveHome(state: GameState, deltaMs: number, playerSpeed: number) {
 function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
   const config = getDifficultyConfig(state.difficulty)
 
-  state.hazard.active = state.level >= config.hazardUnlockLevel
-  state.hazard.visible = state.hazard.active
+  state.hazard.active = true
+  state.hazard.visible = true
 
-  if (!state.hazard.active) {
-    return
-  }
+  const levelBoost =
+    (0.9 + (state.level - 1) * config.hazardLevelBoostPerLevel) * config.hazardSpeedMultiplier
 
-  const levelBoost = (1.08 + (state.level - 1) * 0.09) * config.hazardSpeedMultiplier
+  clampVelocity(state.hazard, config.hazardMaxSpeed)
 
   bounceInsideArena(state.hazard, state.arenaWidth, state.arenaHeight, frameScale * levelBoost)
 
@@ -907,7 +1177,8 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
   const hitDistance = state.player.radius + state.hazard.radius
 
   if (getDistance(state.player, state.hazard) <= hitDistance) {
-    triggerPlanetImpact(state, 'hazard')
+    state.planetCatches.jupiter += 1
+    triggerPlanetImpact(state, 'jupiter')
 
     if (state.invulnerabilityMs > 0) {
       state.hazard.cooldownMs = 500
@@ -919,7 +1190,7 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
       state.invulnerabilityMs = SHIELD_INVULNERABILITY_MS
       incrementEvent(state, 'shield')
       setAnnouncement(state, 'Kalkan seni korudu!', 1100)
-      setLearningFact(state, 'hazard')
+      setLearningFact(state, 'jupiter')
 
       const safePosition = randomPosition(state.arenaWidth, state.arenaHeight, state.hazard.radius)
       state.hazard.x = safePosition.x
@@ -935,7 +1206,7 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
     incrementEvent(state, 'hit')
 
     setAnnouncement(state, 'Dikkat! Jupiter firtinasina carptin.', 1200)
-    setLearningFact(state, 'hazard')
+    setLearningFact(state, 'jupiter')
 
     const position = randomPosition(state.arenaWidth, state.arenaHeight, state.hazard.radius)
     state.hazard.x = position.x
@@ -991,6 +1262,11 @@ const gameSlice = createSlice({
 
       state.hazard.x = clampPosition(state.hazard.x, state.hazard.radius, width - state.hazard.radius)
       state.hazard.y = clampPosition(state.hazard.y, state.hazard.radius, height - state.hazard.radius)
+
+      for (const planet of state.extraPlanets) {
+        planet.x = clampPosition(planet.x, planet.radius, width - planet.radius)
+        planet.y = clampPosition(planet.y, planet.radius, height - planet.radius)
+      }
     },
     setInput: (state, action: PayloadAction<Vector>) => {
       state.input = action.payload
@@ -1168,9 +1444,10 @@ const gameSlice = createSlice({
       state.windMode = speed >= config.windThreshold
 
       applySolarInfluence(state, frameScale)
-      moveCollectible(state, state.spark, deltaMs, frameScale, speed)
-      moveCollectible(state, state.comet, deltaMs, frameScale, speed)
-      moveHome(state, deltaMs, speed)
+      moveCollectible(state, state.spark, deltaMs, frameScale)
+      moveCollectible(state, state.comet, deltaMs, frameScale)
+      moveExtraPlanets(state, deltaMs, frameScale)
+      moveHome(state, deltaMs)
       moveHazard(state, deltaMs, frameScale)
       resolvePlanetCollisions(state)
 
@@ -1178,6 +1455,9 @@ const gameSlice = createSlice({
       state.comet.impactMs = Math.max(0, state.comet.impactMs - deltaMs)
       state.home.impactMs = Math.max(0, state.home.impactMs - deltaMs)
       state.hazard.impactMs = Math.max(0, state.hazard.impactMs - deltaMs)
+      for (const planet of state.extraPlanets) {
+        planet.impactMs = Math.max(0, planet.impactMs - deltaMs)
+      }
       state.player.impactMs = Math.max(0, state.player.impactMs - deltaMs)
       state.planetChainMs = Math.max(0, state.planetChainMs - deltaMs)
 
