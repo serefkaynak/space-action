@@ -882,6 +882,9 @@
       color: color-mix(in oklab, var(--color-cyan-100) 80%, transparent);
     }
   }
+  .text-cyan-200 {
+    color: var(--color-cyan-200);
+  }
   .text-cyan-200\/80 {
     color: color-mix(in srgb, oklch(91.7% 0.08 205.041) 80%, transparent);
     @supports (color: color-mix(in lab, red, red)) {

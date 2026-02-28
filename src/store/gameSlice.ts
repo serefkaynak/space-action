@@ -11,6 +11,9 @@ const BLACK_HOLE_RESPAWN_MS = 5000
 const BLACK_HOLE_VISIBLE_MS = 10 * 1000
 const BLACK_HOLE_INTERVAL_MS = 30 * 1000
 const BLACK_HOLE_FIRST_DELAY_MS = 6000
+const SPACE_EVENT_FIRST_DELAY_MS = 12000
+const SPACE_EVENT_MIN_INTERVAL_MS = 22000
+const SPACE_EVENT_MAX_INTERVAL_MS = 36000
 
 const COMBO_WINDOW_MS = 3200
 const SHIELD_INVULNERABILITY_MS = 1800
@@ -38,6 +41,8 @@ type PlanetKnowledgeKey =
   | 'uranus'
   | 'neptune'
   | 'sun'
+
+type SpaceEventKind = 'none' | 'meteor-shower' | 'solar-flare' | 'calm-space'
 
 type DynamicEntity = {
   x: number
@@ -154,6 +159,13 @@ type QuizState = {
   correctCount: number
   streak: number
   pendingTrigger: number
+}
+
+type SpaceEventState = {
+  active: boolean
+  kind: SpaceEventKind
+  timeLeftMs: number
+  nextEventMs: number
 }
 
 type DifficultyConfig = {
@@ -429,6 +441,47 @@ const QUIZ_POOL: Record<PlanetKnowledgeKey, QuizQuestionTemplate[]> = {
   ],
 }
 
+const SPACE_EVENT_CONFIGS: Record<
+  Exclude<SpaceEventKind, 'none'>,
+  {
+    durationMs: number
+    label: string
+    planetSpeedMultiplier: number
+    hazardSpeedMultiplier: number
+    solarInfluenceMultiplier: number
+    calmPlayerDamping: number
+    playerJitter: number
+  }
+> = {
+  'meteor-shower': {
+    durationMs: 10000,
+    label: 'Meteor Yagmuru',
+    planetSpeedMultiplier: 1.2,
+    hazardSpeedMultiplier: 1.35,
+    solarInfluenceMultiplier: 1,
+    calmPlayerDamping: 1,
+    playerJitter: 0.055,
+  },
+  'solar-flare': {
+    durationMs: 9000,
+    label: 'Gunes Patlamasi',
+    planetSpeedMultiplier: 1.07,
+    hazardSpeedMultiplier: 1.1,
+    solarInfluenceMultiplier: 1.8,
+    calmPlayerDamping: 1,
+    playerJitter: 0.02,
+  },
+  'calm-space': {
+    durationMs: 12000,
+    label: 'Sakin Uzay',
+    planetSpeedMultiplier: 0.72,
+    hazardSpeedMultiplier: 0.68,
+    solarInfluenceMultiplier: 0.62,
+    calmPlayerDamping: 0.96,
+    playerJitter: 0,
+  },
+}
+
 const EXTRA_PLANET_BLUEPRINTS: Array<{
   id: ExtraPlanetId
   radius: number
@@ -522,6 +575,7 @@ export type GameState = {
   sessionElapsedMs: number
   showBreakReminder: boolean
   quiz: QuizState
+  spaceEvent: SpaceEventState
   eventSignal: EventSignal
 }
 
@@ -790,6 +844,12 @@ function createInitialState(): GameState {
       streak: 0,
       pendingTrigger: 0,
     },
+    spaceEvent: {
+      active: false,
+      kind: 'none',
+      timeLeftMs: 0,
+      nextEventMs: SPACE_EVENT_FIRST_DELAY_MS,
+    },
     eventSignal: emptyEventSignal(),
   }
 
@@ -875,6 +935,68 @@ function maybeTriggerQuiz(state: GameState, planet: PlanetKnowledgeKey) {
   state.quiz.question = nextQuestion
   state.isPaused = true
   setAnnouncement(state, 'Mini Quiz zamani! Dogru cevabi bul.', 1700)
+}
+
+function randomSpaceEventInterval() {
+  return Math.round(randomBetween(SPACE_EVENT_MIN_INTERVAL_MS, SPACE_EVENT_MAX_INTERVAL_MS))
+}
+
+function pickRandomSpaceEventKind(): Exclude<SpaceEventKind, 'none'> {
+  const roll = Math.random()
+
+  if (roll < 0.36) {
+    return 'meteor-shower'
+  }
+
+  if (roll < 0.69) {
+    return 'solar-flare'
+  }
+
+  return 'calm-space'
+}
+
+function getSpaceEventConfig(state: GameState) {
+  if (!state.spaceEvent.active || state.spaceEvent.kind === 'none') {
+    return {
+      planetSpeedMultiplier: 1,
+      hazardSpeedMultiplier: 1,
+      solarInfluenceMultiplier: 1,
+      calmPlayerDamping: 1,
+      playerJitter: 0,
+    }
+  }
+
+  return SPACE_EVENT_CONFIGS[state.spaceEvent.kind]
+}
+
+function updateSpaceEventCycle(state: GameState, deltaMs: number) {
+  if (state.spaceEvent.active && state.spaceEvent.kind !== 'none') {
+    state.spaceEvent.timeLeftMs = Math.max(0, state.spaceEvent.timeLeftMs - deltaMs)
+
+    if (state.spaceEvent.timeLeftMs === 0) {
+      const endedKind = state.spaceEvent.kind
+      state.spaceEvent.active = false
+      state.spaceEvent.kind = 'none'
+      state.spaceEvent.nextEventMs = randomSpaceEventInterval()
+      setAnnouncement(state, `${SPACE_EVENT_CONFIGS[endedKind].label} sona erdi.`, 1300)
+    }
+
+    return
+  }
+
+  state.spaceEvent.nextEventMs = Math.max(0, state.spaceEvent.nextEventMs - deltaMs)
+
+  if (state.spaceEvent.nextEventMs > 0) {
+    return
+  }
+
+  const nextKind = pickRandomSpaceEventKind()
+  const config = SPACE_EVENT_CONFIGS[nextKind]
+  state.spaceEvent.active = true
+  state.spaceEvent.kind = nextKind
+  state.spaceEvent.timeLeftMs = config.durationMs
+  state.spaceEvent.nextEventMs = 0
+  setAnnouncement(state, `${config.label} basladi!`, 1700)
 }
 
 function maybeLevelUp(state: GameState) {
@@ -1072,7 +1194,7 @@ function triggerPlanetImpact(state: GameState, source: PlanetImpactSource) {
   }
 }
 
-function applySolarInfluence(state: GameState, frameScale: number) {
+function applySolarInfluence(state: GameState, frameScale: number, eventSolarMultiplier = 1) {
   const config = getDifficultyConfig(state.difficulty)
   const movingBodies = getMovingPlanets(state)
 
@@ -1094,7 +1216,8 @@ function applySolarInfluence(state: GameState, frameScale: number) {
     const gravity =
       Math.min(0.18, 1600 / Math.max(1100, distance * distance)) *
       frameScale *
-      config.solarInfluence
+      config.solarInfluence *
+      eventSolarMultiplier
 
     entity.vx += nx * gravity
     entity.vy += ny * gravity
@@ -1515,6 +1638,12 @@ function setupRound(state: GameState, message: string) {
     streak: 0,
     pendingTrigger: 0,
   }
+  state.spaceEvent = {
+    active: false,
+    kind: 'none',
+    timeLeftMs: 0,
+    nextEventMs: SPACE_EVENT_FIRST_DELAY_MS,
+  }
 
   state.eventSignal = emptyEventSignal()
 
@@ -1526,6 +1655,7 @@ function moveCollectible(
   collectible: Collectible,
   deltaMs: number,
   frameScale: number,
+  eventSpeedMultiplier = 1,
 ) {
   const config = getDifficultyConfig(state.difficulty)
 
@@ -1543,9 +1673,9 @@ function moveCollectible(
 
   collectible.visible = true
 
-  const levelBoost = 0.9 + (state.level - 1) * config.planetLevelBoostPerLevel
+  const levelBoost = (0.9 + (state.level - 1) * config.planetLevelBoostPerLevel) * eventSpeedMultiplier
 
-  clampVelocity(collectible, config.planetMaxSpeed)
+  clampVelocity(collectible, config.planetMaxSpeed * eventSpeedMultiplier)
 
   bounceInsideArena(collectible, state.arenaWidth, state.arenaHeight, frameScale * levelBoost)
 
@@ -1621,7 +1751,12 @@ function applyExtraPlanetEffect(state: GameState, planet: ExtraPlanet) {
   setAnnouncement(state, 'Neptune: combo uzatildi!', 1150)
 }
 
-function moveExtraPlanets(state: GameState, deltaMs: number, frameScale: number) {
+function moveExtraPlanets(
+  state: GameState,
+  deltaMs: number,
+  frameScale: number,
+  eventSpeedMultiplier = 1,
+) {
   const config = getDifficultyConfig(state.difficulty)
 
   for (const planet of state.extraPlanets) {
@@ -1639,8 +1774,9 @@ function moveExtraPlanets(state: GameState, deltaMs: number, frameScale: number)
 
     planet.visible = true
 
-    const levelBoost = 0.88 + (state.level - 1) * config.planetLevelBoostPerLevel
-    clampVelocity(planet, config.planetMaxSpeed * planet.speedFactor)
+    const levelBoost =
+      (0.88 + (state.level - 1) * config.planetLevelBoostPerLevel) * eventSpeedMultiplier
+    clampVelocity(planet, config.planetMaxSpeed * planet.speedFactor * eventSpeedMultiplier)
     bounceInsideArena(planet, state.arenaWidth, state.arenaHeight, frameScale * levelBoost)
 
     if (planet.cooldownMs > 0) {
@@ -1698,7 +1834,12 @@ function moveHome(state: GameState, deltaMs: number) {
   }
 }
 
-function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
+function moveHazard(
+  state: GameState,
+  deltaMs: number,
+  frameScale: number,
+  eventHazardMultiplier = 1,
+) {
   const config = getDifficultyConfig(state.difficulty)
 
   state.hazard.active = true
@@ -1718,9 +1859,11 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
   state.hazard.visible = true
 
   const levelBoost =
-    (0.9 + (state.level - 1) * config.hazardLevelBoostPerLevel) * config.hazardSpeedMultiplier
+    (0.9 + (state.level - 1) * config.hazardLevelBoostPerLevel) *
+    config.hazardSpeedMultiplier *
+    eventHazardMultiplier
 
-  clampVelocity(state.hazard, config.hazardMaxSpeed)
+  clampVelocity(state.hazard, config.hazardMaxSpeed * eventHazardMultiplier)
 
   bounceInsideArena(state.hazard, state.arenaWidth, state.arenaHeight, frameScale * levelBoost)
 
@@ -2005,6 +2148,8 @@ const gameSlice = createSlice({
       const config = getDifficultyConfig(state.difficulty)
       const deltaMs = Math.min(48, Math.max(8, action.payload.deltaMs))
       const frameScale = deltaMs / 16.6667
+      updateSpaceEventCycle(state, deltaMs)
+      const eventConfig = getSpaceEventConfig(state)
 
       const inputMagnitude = Math.hypot(state.input.x, state.input.y)
       const normalizedX = inputMagnitude > 0 ? state.input.x / inputMagnitude : 0
@@ -2021,6 +2166,18 @@ const gameSlice = createSlice({
 
       state.player.vx += (targetVx - state.player.vx) * steeringBlend
       state.player.vy += (targetVy - state.player.vy) * steeringBlend
+
+      if (eventConfig.playerJitter > 0) {
+        const jitter = eventConfig.playerJitter * frameScale
+        state.player.vx += randomBetween(-jitter, jitter)
+        state.player.vy += randomBetween(-jitter, jitter)
+      }
+
+      if (eventConfig.calmPlayerDamping < 1) {
+        const calmDamping = Math.pow(eventConfig.calmPlayerDamping, frameScale)
+        state.player.vx *= calmDamping
+        state.player.vy *= calmDamping
+      }
 
       if (inputMagnitude === 0) {
         const idleDamping = Math.pow(config.idleDamping, frameScale)
@@ -2079,15 +2236,15 @@ const gameSlice = createSlice({
       state.windMode = speed >= config.windThreshold
 
       updateBlackHoleCycle(state, deltaMs)
-      applySolarInfluence(state, frameScale)
+      applySolarInfluence(state, frameScale, eventConfig.solarInfluenceMultiplier)
       if (state.blackHole.visible) {
         applyBlackHoleGravity(state, frameScale)
       }
-      moveCollectible(state, state.spark, deltaMs, frameScale)
-      moveCollectible(state, state.comet, deltaMs, frameScale)
-      moveExtraPlanets(state, deltaMs, frameScale)
+      moveCollectible(state, state.spark, deltaMs, frameScale, eventConfig.planetSpeedMultiplier)
+      moveCollectible(state, state.comet, deltaMs, frameScale, eventConfig.planetSpeedMultiplier)
+      moveExtraPlanets(state, deltaMs, frameScale, eventConfig.planetSpeedMultiplier)
       moveHome(state, deltaMs)
-      moveHazard(state, deltaMs, frameScale)
+      moveHazard(state, deltaMs, frameScale, eventConfig.hazardSpeedMultiplier)
       handleBlackHoleInteractions(state)
       resolvePlanetCollisions(state)
 

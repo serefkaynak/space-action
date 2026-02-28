@@ -49,6 +49,40 @@ type JoystickThumb = {
   y: number
 }
 
+type MeteorTrailVisual = {
+  top: string
+  left: string
+  length: number
+  width: number
+  duration: string
+  delay: string
+  opacity: number
+}
+
+type MeteorSparkVisual = {
+  top: string
+  left: string
+  size: number
+  duration: string
+  delay: string
+  opacity: number
+}
+
+type SolarRingVisual = {
+  size: number
+  duration: string
+  delay: string
+  opacity: number
+}
+
+type SolarRayVisual = {
+  length: number
+  angle: number
+  duration: string
+  delay: string
+  opacity: number
+}
+
 const JOYSTICK_MAX_OFFSET = 58
 const JOYSTICK_DEADZONE = 0.14
 
@@ -100,6 +134,19 @@ const PLANET_DISPLAY_LABELS: Record<string, string> = {
   uranus: 'Uranus',
   neptune: 'Neptune',
   sun: 'Gunes',
+}
+
+const SPACE_EVENT_LABELS: Record<string, string> = {
+  none: 'Normal Uzay',
+  'meteor-shower': 'Meteor Yagmuru',
+  'solar-flare': 'Gunes Patlamasi',
+  'calm-space': 'Sakin Uzay',
+}
+
+const SPACE_EVENT_CLASS_KEYS: Record<string, string> = {
+  'meteor-shower': 'meteor',
+  'solar-flare': 'flare',
+  'calm-space': 'calm',
 }
 
 function ControlButton({ label, direction, onPress }: ControlButtonProps) {
@@ -183,6 +230,51 @@ function App() {
       { top: '40%', left: '54%', size: 3 },
       { top: '18%', left: '44%', size: 6 },
       { top: '71%', left: '12%', size: 3 },
+    ],
+    [],
+  )
+
+  const meteorTrails = useMemo<MeteorTrailVisual[]>(
+    () => [
+      { top: '-22%', left: '8%', length: 160, width: 4, duration: '1.2s', delay: '-0.3s', opacity: 0.84 },
+      { top: '-30%', left: '22%', length: 130, width: 3, duration: '1.35s', delay: '-0.85s', opacity: 0.72 },
+      { top: '-18%', left: '38%', length: 172, width: 4, duration: '1.45s', delay: '-0.7s', opacity: 0.86 },
+      { top: '-32%', left: '51%', length: 122, width: 3, duration: '1.18s', delay: '-0.2s', opacity: 0.74 },
+      { top: '-22%', left: '67%', length: 156, width: 4, duration: '1.38s', delay: '-1.08s', opacity: 0.82 },
+      { top: '-29%', left: '80%', length: 136, width: 3, duration: '1.5s', delay: '-0.52s', opacity: 0.69 },
+      { top: '-20%', left: '92%', length: 176, width: 4, duration: '1.28s', delay: '-0.95s', opacity: 0.88 },
+    ],
+    [],
+  )
+
+  const meteorSparks = useMemo<MeteorSparkVisual[]>(
+    () => [
+      { top: '16%', left: '26%', size: 6, duration: '1.9s', delay: '-0.2s', opacity: 0.78 },
+      { top: '28%', left: '64%', size: 5, duration: '2.2s', delay: '-1.2s', opacity: 0.68 },
+      { top: '46%', left: '41%', size: 7, duration: '1.8s', delay: '-0.6s', opacity: 0.82 },
+      { top: '60%', left: '78%', size: 5, duration: '2.4s', delay: '-1.4s', opacity: 0.65 },
+      { top: '70%', left: '18%', size: 6, duration: '2.1s', delay: '-0.9s', opacity: 0.72 },
+    ],
+    [],
+  )
+
+  const solarRings = useMemo<SolarRingVisual[]>(
+    () => [
+      { size: 150, duration: '2.4s', delay: '-0.2s', opacity: 0.72 },
+      { size: 220, duration: '2.8s', delay: '-1s', opacity: 0.64 },
+      { size: 290, duration: '3.3s', delay: '-1.4s', opacity: 0.52 },
+      { size: 360, duration: '3.8s', delay: '-2.1s', opacity: 0.4 },
+    ],
+    [],
+  )
+
+  const solarRays = useMemo<SolarRayVisual[]>(
+    () => [
+      { length: 220, angle: 156, duration: '1.55s', delay: '-0.4s', opacity: 0.72 },
+      { length: 190, angle: 168, duration: '1.72s', delay: '-1.2s', opacity: 0.66 },
+      { length: 230, angle: 182, duration: '1.66s', delay: '-0.8s', opacity: 0.75 },
+      { length: 200, angle: 196, duration: '1.58s', delay: '-1.05s', opacity: 0.7 },
+      { length: 174, angle: 209, duration: '1.86s', delay: '-0.2s', opacity: 0.64 },
     ],
     [],
   )
@@ -569,7 +661,14 @@ function App() {
     ? 'game-stage game-stage--wind relative h-[58vh] min-h-[340px] max-h-[640px] w-full overflow-hidden rounded-[30px] border border-amber-300/35 bg-[radial-gradient(circle_at_18%_16%,_rgba(251,191,36,0.28),_transparent_44%),radial-gradient(circle_at_76%_2%,_rgba(251,146,60,0.22),_transparent_40%),linear-gradient(160deg,_rgba(30,58,138,0.88),_rgba(15,23,42,0.95))] shadow-[0_24px_90px_rgba(30,64,175,0.45)]'
     : 'game-stage relative h-[58vh] min-h-[340px] max-h-[640px] w-full overflow-hidden rounded-[30px] border border-cyan-300/25 bg-[radial-gradient(circle_at_25%_20%,_rgba(14,116,144,0.4),_transparent_44%),radial-gradient(circle_at_80%_0%,_rgba(251,146,60,0.22),_transparent_42%),linear-gradient(160deg,_rgba(2,6,23,0.95),_rgba(15,23,42,0.92))] shadow-[0_24px_90px_rgba(8,47,73,0.55)]'
 
-  const stageClass = game.planetChainMs > 0 ? `${stageBaseClass} game-stage--chain` : stageBaseClass
+  const activeEventClassKey = game.spaceEvent.active ? SPACE_EVENT_CLASS_KEYS[game.spaceEvent.kind] : ''
+  const stageClass = [
+    stageBaseClass,
+    game.planetChainMs > 0 ? 'game-stage--chain' : '',
+    activeEventClassKey ? `game-stage--event-${activeEventClassKey}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   const playerStyle: CSSProperties = {
     width: game.player.radius * 2,
@@ -768,6 +867,13 @@ function App() {
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-300">Karadelik</p>
                   <p className="title-font text-base text-cyan-100">{game.blackHole.visible ? 'Aktif' : 'Henuz Yok'}</p>
                 </div>
+                <div className="rounded-2xl border border-cyan-200/15 bg-cyan-200/10 px-3 py-3 text-center col-span-2">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-300">Uzay Olayi</p>
+                  <p className="title-font text-base text-cyan-100">
+                    {SPACE_EVENT_LABELS[game.spaceEvent.kind] ?? 'Normal Uzay'}
+                    {game.spaceEvent.active ? ` (${Math.ceil(game.spaceEvent.timeLeftMs / 1000)} sn)` : ''}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -850,6 +956,78 @@ function App() {
                 />
               ))}
             </div>
+
+            {activeEventClassKey ? (
+              <div className={`space-event-layer space-event-layer--${activeEventClassKey}`}>
+                {activeEventClassKey === 'meteor' ? (
+                  <div className="space-event-layer__meteor-field">
+                    {meteorTrails.map((trail, index) => (
+                      <span
+                        key={`meteor-trail-${index}`}
+                        className="space-event-layer__meteor-streak"
+                        style={{
+                          top: trail.top,
+                          left: trail.left,
+                          width: trail.width,
+                          height: trail.length,
+                          animationDuration: trail.duration,
+                          animationDelay: trail.delay,
+                          opacity: trail.opacity,
+                        }}
+                      />
+                    ))}
+                    {meteorSparks.map((spark, index) => (
+                      <span
+                        key={`meteor-spark-${index}`}
+                        className="space-event-layer__meteor-ember"
+                        style={{
+                          top: spark.top,
+                          left: spark.left,
+                          width: spark.size,
+                          height: spark.size,
+                          animationDuration: spark.duration,
+                          animationDelay: spark.delay,
+                          opacity: spark.opacity,
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+
+                {activeEventClassKey === 'flare' ? (
+                  <div className="space-event-layer__flare-field">
+                    <span className="space-event-layer__flare-core" />
+                    <span className="space-event-layer__flare-haze" />
+                    {solarRings.map((ring, index) => (
+                      <span
+                        key={`flare-ring-${index}`}
+                        className="space-event-layer__flare-ring"
+                        style={{
+                          width: ring.size,
+                          height: ring.size,
+                          animationDuration: ring.duration,
+                          animationDelay: ring.delay,
+                          opacity: ring.opacity,
+                        }}
+                      />
+                    ))}
+                    {solarRays.map((ray, index) => (
+                      <span
+                        key={`flare-ray-${index}`}
+                        className="space-event-layer__flare-ray"
+                        style={{
+                          width: ray.length,
+                          transform: `translateY(-50%) rotate(${ray.angle}deg)`,
+                          animationDuration: ray.duration,
+                          animationDelay: ray.delay,
+                          opacity: ray.opacity,
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {game.blackHole.visible ? (
               <div
@@ -1063,6 +1241,9 @@ function App() {
               </p>
               <p className="mt-1 text-sm text-amber-100">
                 <span className="font-semibold text-amber-200">Karadelik:</span> Gezegenleri 5 sn icin yutar, roket girerse can gider.
+              </p>
+              <p className="mt-1 text-sm text-cyan-100">
+                <span className="font-semibold text-cyan-200">Dinamik Olay:</span> Bazen meteor yagmuru, gunes patlamasi veya sakin uzay olur.
               </p>
 
               <div
