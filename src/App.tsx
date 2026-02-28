@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import {
+  answerQuiz,
   dismissBreakReminder,
   nudgePlayer,
   resetPlayerPosition,
@@ -24,6 +25,7 @@ import {
   stopPlayer,
   tick,
   togglePause,
+  skipQuiz,
   type Difficulty,
   type RocketSkin,
 } from './store/gameSlice'
@@ -76,16 +78,28 @@ const BADGE_LABELS: Record<string, string> = {
   'space-marathon': 'Uzay Maratoncusu',
 }
 
-const PLANET_GUIDE: Array<{ id: string; title: string; trait: string }> = [
-  { id: 'mercury', title: 'Merkur', trait: 'Cok hizli, kucuk hedef.' },
-  { id: 'venus', title: 'Venus', trait: 'Kalkan destegi verir.' },
-  { id: 'earth', title: 'Dunya', trait: 'Dengeli puan.' },
-  { id: 'mars', title: 'Mars', trait: 'Kizil gezegen, ekstra puan.' },
-  { id: 'jupiter', title: 'Jupiter', trait: 'Dev firtina, riskli temas.' },
-  { id: 'saturn', title: 'Saturn', trait: 'Halka etkisiyle akisi yavaslatir.' },
-  { id: 'uranus', title: 'Uranus', trait: 'Ekstra can kazandirir.' },
-  { id: 'neptune', title: 'Neptune', trait: 'Combo suresini uzatir.' },
+const PLANET_GUIDE: Array<{ id: string; title: string; trait: string; size: number }> = [
+  { id: 'mercury', title: 'Merkur', trait: 'Cok hizli, kucuk hedef.', size: 14 },
+  { id: 'venus', title: 'Venus', trait: 'Kalkan destegi verir.', size: 18 },
+  { id: 'earth', title: 'Dunya', trait: 'Dengeli puan.', size: 18 },
+  { id: 'mars', title: 'Mars', trait: 'Kizil gezegen, ekstra puan.', size: 16 },
+  { id: 'jupiter', title: 'Jupiter', trait: 'Dev firtina, riskli temas.', size: 24 },
+  { id: 'saturn', title: 'Saturn', trait: 'Halka etkisiyle akisi yavaslatir.', size: 22 },
+  { id: 'uranus', title: 'Uranus', trait: 'Ekstra can kazandirir.', size: 20 },
+  { id: 'neptune', title: 'Neptune', trait: 'Combo suresini uzatir.', size: 20 },
 ]
+
+const PLANET_DISPLAY_LABELS: Record<string, string> = {
+  mercury: 'Merkur',
+  venus: 'Venus',
+  earth: 'Dunya',
+  mars: 'Mars',
+  jupiter: 'Jupiter',
+  saturn: 'Saturn',
+  uranus: 'Uranus',
+  neptune: 'Neptune',
+  sun: 'Gunes',
+}
 
 function ControlButton({ label, direction, onPress }: ControlButtonProps) {
   return (
@@ -150,6 +164,14 @@ function App() {
 
     return `${game.currentMission.target} saniye hayatta kal`
   }, [game.currentMission.kind, game.currentMission.target])
+
+  const quizAccuracy = useMemo(() => {
+    if (game.quiz.askedCount === 0) {
+      return 0
+    }
+
+    return Math.round((game.quiz.correctCount / game.quiz.askedCount) * 100)
+  }, [game.quiz.askedCount, game.quiz.correctCount])
 
   const sparkles = useMemo(
     () => [
@@ -254,7 +276,7 @@ function App() {
   }, [dispatch])
 
   useEffect(() => {
-    if (game.isPaused || game.isGameOver || game.showBreakReminder) {
+    if (game.isPaused || game.isGameOver || game.showBreakReminder || game.quiz.active) {
       return
     }
 
@@ -282,7 +304,7 @@ function App() {
     return () => {
       window.cancelAnimationFrame(animationFrame)
     }
-  }, [dispatch, game.isGameOver, game.isPaused, game.showBreakReminder])
+  }, [dispatch, game.isGameOver, game.isPaused, game.quiz.active, game.showBreakReminder])
 
   useEffect(() => {
     const pressedKeys = new Set<string>()
@@ -475,13 +497,13 @@ function App() {
   }, [dispatch])
 
   useEffect(() => {
-    if (game.isPaused || game.isGameOver || game.showBreakReminder) {
+    if (game.isPaused || game.isGameOver || game.showBreakReminder || game.quiz.active) {
       dispatch(setInput({ x: 0, y: 0 }))
     }
-  }, [dispatch, game.isGameOver, game.isPaused, game.showBreakReminder])
+  }, [dispatch, game.isGameOver, game.isPaused, game.quiz.active, game.showBreakReminder])
 
   const updateJoystickInput = (clientX: number, clientY: number) => {
-    if (!joystickRef.current || game.isPaused || game.isGameOver || game.showBreakReminder) {
+    if (!joystickRef.current || game.isPaused || game.isGameOver || game.showBreakReminder || game.quiz.active) {
       return
     }
 
@@ -513,7 +535,7 @@ function App() {
   }
 
   const handleJoystickPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (game.isPaused || game.isGameOver || game.showBreakReminder) {
+    if (game.isPaused || game.isGameOver || game.showBreakReminder || game.quiz.active) {
       return
     }
 
@@ -614,7 +636,8 @@ function App() {
       ? 'touch-control-dock__inner'
       : 'touch-control-dock__inner touch-control-dock__inner--reverse'
 
-  const joystickIsEngaged = joystickActive && !game.isPaused && !game.isGameOver && !game.showBreakReminder
+  const joystickIsEngaged =
+    joystickActive && !game.isPaused && !game.isGameOver && !game.showBreakReminder && !game.quiz.active
   const joystickVisualThumb = joystickIsEngaged ? joystickThumb : { x: 0, y: 0 }
 
   return (
@@ -734,6 +757,25 @@ function App() {
             </div>
 
             <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">
+              <h3 className="title-font text-base text-cyan-100">Bilim Quiz Durumu</h3>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                <div className="rounded-xl border border-cyan-200/15 bg-cyan-200/10 px-2 py-2 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-300">Soru</p>
+                  <p className="title-font text-lg text-cyan-100">{game.quiz.askedCount}</p>
+                </div>
+                <div className="rounded-xl border border-emerald-200/15 bg-emerald-300/10 px-2 py-2 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-300">Dogru</p>
+                  <p className="title-font text-lg text-emerald-100">{game.quiz.correctCount}</p>
+                </div>
+                <div className="rounded-xl border border-amber-200/15 bg-amber-300/10 px-2 py-2 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-300">Basari</p>
+                  <p className="title-font text-lg text-amber-100">%{quizAccuracy}</p>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-300">Her 3 gezegen yakalamada mini quiz acilir.</p>
+            </div>
+
+            <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">
               <h3 className="title-font text-base text-cyan-100">Gezegen Takibi</h3>
               <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-slate-200">
                 <p>Merkur: {game.planetCatches.mercury}</p>
@@ -835,7 +877,51 @@ function App() {
               </div>
             ) : null}
 
-            {game.isPaused && !game.isGameOver && !game.showBreakReminder ? (
+            {game.quiz.active && game.quiz.question ? (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
+                <div className="w-full max-w-md rounded-3xl border border-cyan-100/35 bg-slate-900/90 px-5 py-5 shadow-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className="planet-preview-wrap">
+                      <span
+                        className={`planet planet-preview planet--${game.quiz.question.planet}`}
+                        style={{ width: '24px', height: '24px' }}
+                      />
+                    </div>
+                    <div>
+                      <p className="title-font text-lg text-cyan-100">Mini Bilim Quiz</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-cyan-200/80">
+                        {PLANET_DISPLAY_LABELS[game.quiz.question.planet] ?? game.quiz.question.planet}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-sm text-slate-100">{game.quiz.question.prompt}</p>
+
+                  <div className="mt-3 space-y-2">
+                    {game.quiz.question.options.map((option, index) => (
+                      <button
+                        key={`${game.quiz.question?.id}-opt-${index}`}
+                        type="button"
+                        className="w-full rounded-xl border border-cyan-200/25 bg-cyan-300/10 px-3 py-2 text-left text-sm text-cyan-50 transition hover:bg-cyan-200/20"
+                        onClick={() => dispatch(answerQuiz({ index }))}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="mt-3 w-full rounded-xl border border-slate-300/25 bg-slate-700/55 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-600/65"
+                    onClick={() => dispatch(skipQuiz())}
+                  >
+                    Bu Soruyu Gec
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {game.isPaused && !game.isGameOver && !game.showBreakReminder && !game.quiz.active ? (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-950/45 backdrop-blur-sm">
                 <div className="rounded-2xl border border-cyan-100/25 bg-slate-900/75 px-5 py-4 text-center">
                   <p className="title-font text-2xl text-cyan-100">Duraklatildi</p>
@@ -973,9 +1059,20 @@ function App() {
               <h3 className="title-font text-base text-cyan-100">8 Gezegen Ozellikleri</h3>
               <div className="mt-2 space-y-2">
                 {PLANET_GUIDE.map((planet) => (
-                  <div key={planet.id} className="rounded-xl border border-cyan-200/15 bg-cyan-200/5 px-2.5 py-2">
-                    <p className="text-sm font-semibold text-cyan-100">{planet.title}</p>
-                    <p className="text-xs text-slate-300">{planet.trait}</p>
+                  <div
+                    key={planet.id}
+                    className="flex items-center gap-2 rounded-xl border border-cyan-200/15 bg-cyan-200/5 px-2.5 py-2"
+                  >
+                    <div className="planet-preview-wrap">
+                      <span
+                        className={`planet planet-preview planet--${planet.id}`}
+                        style={{ width: `${planet.size}px`, height: `${planet.size}px` }}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-cyan-100">{planet.title}</p>
+                      <p className="text-xs text-slate-300">{planet.trait}</p>
+                    </div>
                   </div>
                 ))}
               </div>

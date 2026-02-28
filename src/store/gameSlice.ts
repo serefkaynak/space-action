@@ -23,6 +23,17 @@ export type Vector = {
   y: number
 }
 
+type PlanetKnowledgeKey =
+  | 'mercury'
+  | 'venus'
+  | 'earth'
+  | 'mars'
+  | 'jupiter'
+  | 'saturn'
+  | 'uranus'
+  | 'neptune'
+  | 'sun'
+
 type DynamicEntity = {
   x: number
   y: number
@@ -101,6 +112,31 @@ type EventSignal = {
   level: number
   unlock: number
   shield: number
+}
+
+type QuizQuestionTemplate = {
+  prompt: string
+  options: [string, string, string]
+  correctIndex: number
+  explanation: string
+}
+
+type QuizQuestion = {
+  id: string
+  planet: PlanetKnowledgeKey
+  prompt: string
+  options: [string, string, string]
+  correctIndex: number
+  explanation: string
+}
+
+type QuizState = {
+  active: boolean
+  question: QuizQuestion | null
+  askedCount: number
+  correctCount: number
+  streak: number
+  pendingTrigger: number
 }
 
 type DifficultyConfig = {
@@ -227,7 +263,7 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
   },
 }
 
-const PLANET_FACTS: Record<'mercury' | 'venus' | 'earth' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'sun', string> = {
+const PLANET_FACTS: Record<PlanetKnowledgeKey, string> = {
   mercury: 'Merkur, Gunes Sistemindeki en kucuk ve Gunes\'e en yakin gezegendir.',
   venus: 'Venus en sicak gezegendir; kalin atmosferi isi hapseder.',
   earth: 'Dunya, yuzeyinde sivisi halde su bulunan tek bilinen gezegendir.',
@@ -237,6 +273,135 @@ const PLANET_FACTS: Record<'mercury' | 'venus' | 'earth' | 'mars' | 'jupiter' | 
   uranus: 'Uranus neredeyse yana yatmis ekseniyle diger gezegenlerden ayrilir.',
   neptune: 'Neptune cok uzak ve cok ruzgarli bir buz dev gezegendir.',
   sun: 'Gunes, Gunes Sistemi kutlesinin neredeyse tamamina sahiptir.',
+}
+
+const QUIZ_POOL: Record<PlanetKnowledgeKey, QuizQuestionTemplate[]> = {
+  mercury: [
+    {
+      prompt: 'Merkur icin dogru ifade hangisi?',
+      options: ['Gunes\'e en yakin gezegen', 'En buyuk gezegen', 'Halkasi en belirgin gezegen'],
+      correctIndex: 0,
+      explanation: 'Merkur, Gunes\'e en yakin gezegendir.',
+    },
+    {
+      prompt: 'Merkur nasil bir gezegendir?',
+      options: ['Kucuk ve hizli dolasan', 'Buz devi', 'Kalin halkali'],
+      correctIndex: 0,
+      explanation: 'Merkur, kucuk bir kaya gezegenidir ve yörüngesi kısadır.',
+    },
+  ],
+  venus: [
+    {
+      prompt: 'Venus neden cok sicaktir?',
+      options: ['Kalin atmosferi isi tutar', 'Gunes\'ten en uzak oldugu icin', 'Cekirdegi buz oldugu icin'],
+      correctIndex: 0,
+      explanation: 'Venus\'un kalin atmosferi sera etkisi olusturur.',
+    },
+    {
+      prompt: 'Venus hangi tipte gezegendir?',
+      options: ['Kaya gezegeni', 'Gaz devi', 'Buz devi'],
+      correctIndex: 0,
+      explanation: 'Venus, Dunya gibi kaya gezegenlerinden biridir.',
+    },
+  ],
+  earth: [
+    {
+      prompt: 'Dunya\'yi ozel yapan sey nedir?',
+      options: ['Sivi suyun bulunmasi', 'Halkalarinin olmasi', 'En sicak gezegen olmasi'],
+      correctIndex: 0,
+      explanation: 'Dunya\'da sivi halde su bulunur.',
+    },
+    {
+      prompt: 'Dunya hangi gezegen grubundadir?',
+      options: ['Kaya gezegenleri', 'Gaz devleri', 'Buz devleri'],
+      correctIndex: 0,
+      explanation: 'Dunya, ic grupta yer alan kaya gezegenidir.',
+    },
+  ],
+  mars: [
+    {
+      prompt: 'Mars neden kizil gorunur?',
+      options: ['Yuzeyde demir oksit oldugu icin', 'Denizleri mavi oldugu icin', 'Halkalari oldugu icin'],
+      correctIndex: 0,
+      explanation: 'Mars tozundaki demir oksit kizil renk verir.',
+    },
+    {
+      prompt: 'Mars ile ilgili hangisi dogrudur?',
+      options: ['Kaya gezegenidir', 'En buyuk gezegendir', 'Gunes\'e en yakin gezegendir'],
+      correctIndex: 0,
+      explanation: 'Mars, kaya gezegenidir.',
+    },
+  ],
+  jupiter: [
+    {
+      prompt: 'Jupiter icin dogru secenek hangisi?',
+      options: ['En buyuk gezegen', 'En kucuk gezegen', 'Hic uydusu yok'],
+      correctIndex: 0,
+      explanation: 'Jupiter, Gunes Sistemindeki en buyuk gezegendir.',
+    },
+    {
+      prompt: 'Buyuk Kirmizi Leke nedir?',
+      options: ['Dev bir firtina', 'Bir dag', 'Bir buz tabakasi'],
+      correctIndex: 0,
+      explanation: 'Buyuk Kirmizi Leke Jupiter\'deki dev firtinadir.',
+    },
+  ],
+  saturn: [
+    {
+      prompt: 'Saturn en cok ne ile bilinir?',
+      options: ['Belirgin halkalariyla', 'Tamamen mavi rengiyle', 'Uydusuz olmasiyla'],
+      correctIndex: 0,
+      explanation: 'Saturn\'un halkalari cok belirgindir.',
+    },
+    {
+      prompt: 'Saturn hangi gruptadir?',
+      options: ['Gaz devleri', 'Kaya gezegenleri', 'Cuce gezegenler'],
+      correctIndex: 0,
+      explanation: 'Saturn, gaz devi grubundadir.',
+    },
+  ],
+  uranus: [
+    {
+      prompt: 'Uranus\'un farkli ozelligi nedir?',
+      options: ['Ekseni yana yatiktir', 'En sicak gezegendir', 'Halkasi hic yoktur'],
+      correctIndex: 0,
+      explanation: 'Uranus neredeyse yana yatmis ekseniyle bilinir.',
+    },
+    {
+      prompt: 'Uranus hangi siniftadir?',
+      options: ['Buz devi', 'Kaya gezegeni', 'Yildiz'],
+      correctIndex: 0,
+      explanation: 'Uranus, buz devleri grubundadir.',
+    },
+  ],
+  neptune: [
+    {
+      prompt: 'Neptune ile ilgili hangisi dogru?',
+      options: ['Cok uzak ve ruzgarli bir gezegen', 'Gunes\'e en yakin gezegen', 'Halkasiz tek dis gezegen'],
+      correctIndex: 0,
+      explanation: 'Neptune, cok uzak ve guclu ruzgarlariyla bilinir.',
+    },
+    {
+      prompt: 'Neptune hangi gruptadir?',
+      options: ['Buz devleri', 'Kaya gezegenleri', 'Cuce gezegenler'],
+      correctIndex: 0,
+      explanation: 'Neptune, Uranus gibi buz devidir.',
+    },
+  ],
+  sun: [
+    {
+      prompt: 'Gunes nedir?',
+      options: ['Bir yildiz', 'Bir gezegen', 'Bir uydu'],
+      correctIndex: 0,
+      explanation: 'Gunes, sistemimizin merkezindeki yildizdir.',
+    },
+    {
+      prompt: 'Gunes Sistemindeki kutlenin buyuk kismi nerededir?',
+      options: ['Gunes\'te', 'Jupiter\'de', 'Dunya\'da'],
+      correctIndex: 0,
+      explanation: 'Toplam kutlenin buyuk bolumu Gunes\'tedir.',
+    },
+  ],
 }
 
 const EXTRA_PLANET_BLUEPRINTS: Array<{
@@ -329,6 +494,7 @@ export type GameState = {
   settings: ParentSettings
   sessionElapsedMs: number
   showBreakReminder: boolean
+  quiz: QuizState
   eventSignal: EventSignal
 }
 
@@ -571,6 +737,14 @@ function createInitialState(): GameState {
     },
     sessionElapsedMs: 0,
     showBreakReminder: false,
+    quiz: {
+      active: false,
+      question: null,
+      askedCount: 0,
+      correctCount: 0,
+      streak: 0,
+      pendingTrigger: 0,
+    },
     eventSignal: emptyEventSignal(),
   }
 
@@ -614,10 +788,43 @@ function grantBadge(state: GameState, badgeId: string, message: string) {
 
 function setLearningFact(
   state: GameState,
-  key: 'mercury' | 'venus' | 'earth' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'sun',
+  key: PlanetKnowledgeKey,
 ) {
   state.learningFact = PLANET_FACTS[key]
   state.learningFactTimerMs = 6200
+}
+
+function createQuizQuestion(planet: PlanetKnowledgeKey, askedCount: number): QuizQuestion {
+  const templates = QUIZ_POOL[planet]
+  const template = templates[askedCount % templates.length]
+
+  return {
+    id: `quiz-${planet}-${askedCount + 1}`,
+    planet,
+    prompt: template.prompt,
+    options: template.options,
+    correctIndex: template.correctIndex,
+    explanation: template.explanation,
+  }
+}
+
+function maybeTriggerQuiz(state: GameState, planet: PlanetKnowledgeKey) {
+  if (state.quiz.active || state.isGameOver || state.showBreakReminder) {
+    return
+  }
+
+  state.quiz.pendingTrigger += 1
+
+  if (state.quiz.pendingTrigger < 3) {
+    return
+  }
+
+  const nextQuestion = createQuizQuestion(planet, state.quiz.askedCount)
+  state.quiz.pendingTrigger = 0
+  state.quiz.active = true
+  state.quiz.question = nextQuestion
+  state.isPaused = true
+  setAnnouncement(state, 'Mini Quiz zamani! Dogru cevabi bul.', 1700)
 }
 
 function maybeLevelUp(state: GameState) {
@@ -1006,6 +1213,14 @@ function setupRound(state: GameState, message: string) {
 
   state.sessionElapsedMs = 0
   state.showBreakReminder = false
+  state.quiz = {
+    active: false,
+    question: null,
+    askedCount: 0,
+    correctCount: 0,
+    streak: 0,
+    pendingTrigger: 0,
+  }
 
   state.eventSignal = emptyEventSignal()
 
@@ -1042,11 +1257,13 @@ function moveCollectible(
       state.planetCatches.earth += 1
       setLearningFact(state, 'earth')
       progressMission(state, 'earth', 1)
+      maybeTriggerQuiz(state, 'earth')
     } else {
       collectPoints(state, points, 'Mars yakalandi!')
       state.planetCatches.mars += 1
       setLearningFact(state, 'mars')
       progressMission(state, 'mars', 1)
+      maybeTriggerQuiz(state, 'mars')
     }
 
     triggerPlanetImpact(state, collectible.id)
@@ -1120,6 +1337,7 @@ function moveExtraPlanets(state: GameState, deltaMs: number, frameScale: number)
     collectPoints(state, planet.points * state.combo, `${planet.id.toUpperCase()} yakalandi!`)
     setLearningFact(state, planet.id)
     state.planetCatches[planet.id] += 1
+    maybeTriggerQuiz(state, planet.id)
     applyExtraPlanetEffect(state, planet)
     triggerPlanetImpact(state, planet.id)
 
@@ -1146,6 +1364,7 @@ function moveHome(state: GameState, deltaMs: number) {
     state.planetCatches.sun += 1
     setLearningFact(state, 'sun')
     progressMission(state, 'sun', 1)
+    maybeTriggerQuiz(state, 'sun')
 
     triggerPlanetImpact(state, 'sun')
 
@@ -1316,6 +1535,57 @@ const gameSlice = createSlice({
 
       state.selectedSkin = action.payload
     },
+    answerQuiz: (state, action: PayloadAction<{ index: number }>) => {
+      const question = state.quiz.question
+
+      if (!state.quiz.active || !question) {
+        return
+      }
+
+      const isCorrect = action.payload.index === question.correctIndex
+      state.quiz.askedCount += 1
+
+      if (isCorrect) {
+        state.quiz.correctCount += 1
+        state.quiz.streak += 1
+
+        const bonus = 25 + Math.min(25, state.quiz.streak * 3)
+        state.score += bonus
+        refreshHighScore(state)
+        maybeLevelUp(state)
+        incrementEvent(state, 'mission')
+        setAnnouncement(state, `Dogru! +${bonus}. ${question.explanation}`, 2400)
+      } else {
+        state.quiz.streak = 0
+        incrementEvent(state, 'hit')
+        setAnnouncement(
+          state,
+          `Cevap: ${question.options[question.correctIndex]}. ${question.explanation}`,
+          2600,
+        )
+      }
+
+      state.quiz.active = false
+      state.quiz.question = null
+
+      if (!state.isGameOver && !state.showBreakReminder) {
+        state.isPaused = false
+      }
+    },
+    skipQuiz: (state) => {
+      if (!state.quiz.active) {
+        return
+      }
+
+      state.quiz.active = false
+      state.quiz.question = null
+      state.quiz.streak = 0
+      setAnnouncement(state, 'Quiz atlandi. Devam!', 1200)
+
+      if (!state.isGameOver && !state.showBreakReminder) {
+        state.isPaused = false
+      }
+    },
     nudgePlayer: (state, action: PayloadAction<Vector>) => {
       if (state.isGameOver || state.isPaused) {
         return
@@ -1352,7 +1622,7 @@ const gameSlice = createSlice({
       setAnnouncement(state, 'Roket merkeze alindi.', 1000)
     },
     togglePause: (state) => {
-      if (state.isGameOver || state.showBreakReminder) {
+      if (state.isGameOver || state.showBreakReminder || state.quiz.active) {
         return
       }
 
@@ -1363,7 +1633,7 @@ const gameSlice = createSlice({
       setupRound(state, 'Yeni oyun basladi!')
     },
     tick: (state, action: PayloadAction<{ deltaMs: number }>) => {
-      if (state.isPaused || state.isGameOver || state.showBreakReminder) {
+      if (state.isPaused || state.isGameOver || state.showBreakReminder || state.quiz.active) {
         return
       }
 
@@ -1528,6 +1798,8 @@ export const {
   setSessionReminderMinutes,
   dismissBreakReminder,
   selectRocketSkin,
+  answerQuiz,
+  skipQuiz,
   nudgePlayer,
   stopPlayer,
   resetPlayerPosition,
