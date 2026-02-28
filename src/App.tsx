@@ -303,9 +303,11 @@ function App() {
     [joystickThumb.x, joystickThumb.y],
   )
 
-  const stageClass = game.windMode
+  const stageBaseClass = game.windMode
     ? 'game-stage game-stage--wind relative h-[62vh] min-h-[340px] max-h-[640px] w-full overflow-hidden rounded-[30px] border border-amber-300/35 bg-[radial-gradient(circle_at_18%_16%,_rgba(251,191,36,0.28),_transparent_44%),radial-gradient(circle_at_76%_2%,_rgba(251,146,60,0.22),_transparent_40%),linear-gradient(160deg,_rgba(30,58,138,0.88),_rgba(15,23,42,0.95))] shadow-[0_24px_90px_rgba(30,64,175,0.45)]'
     : 'game-stage relative h-[62vh] min-h-[340px] max-h-[640px] w-full overflow-hidden rounded-[30px] border border-cyan-300/25 bg-[radial-gradient(circle_at_25%_20%,_rgba(14,116,144,0.4),_transparent_44%),radial-gradient(circle_at_80%_0%,_rgba(251,146,60,0.22),_transparent_42%),linear-gradient(160deg,_rgba(2,6,23,0.95),_rgba(15,23,42,0.92))] shadow-[0_24px_90px_rgba(8,47,73,0.55)]'
+
+  const stageClass = game.planetChainMs > 0 ? `${stageBaseClass} game-stage--chain` : stageBaseClass
 
   const playerStyle: CSSProperties = {
     width: game.player.radius * 2,
@@ -412,11 +414,11 @@ function App() {
             </div>
 
             <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">
-              <h3 className="title-font text-base text-cyan-100">Puan Rehberi</h3>
-              <p className="mt-2 text-sm text-slate-200">Zümrüt gezegen: +10</p>
-              <p className="mt-1 text-sm text-slate-200">Mavi gezegen: +20</p>
-              <p className="mt-1 text-sm text-slate-200">Uzay istasyonu: +100</p>
-              <p className="mt-1 text-sm text-rose-200">Kızıl gezegen: can azaltır</p>
+              <h3 className="title-font text-base text-cyan-100">Gezegen Rehberi</h3>
+              <p className="mt-2 text-sm text-slate-200">Dünya (mavi-yeşil): +15</p>
+              <p className="mt-1 text-sm text-slate-200">Mars (kızıl): +25</p>
+              <p className="mt-1 text-sm text-slate-200">Güneş (büyük, sarı-turuncu): +120</p>
+              <p className="mt-1 text-sm text-rose-200">Jüpiter fırtınası: can azaltır</p>
             </div>
           </aside>
 
@@ -445,28 +447,44 @@ function App() {
 
             <div
               className={
-                game.spark.visible ? 'planet planet--emerald opacity-100' : 'planet planet--emerald opacity-0'
+                game.spark.visible
+                  ? game.spark.impactMs > 0
+                    ? 'planet planet--earth planet-impact opacity-100'
+                    : 'planet planet--earth opacity-100'
+                  : 'planet planet--earth opacity-0'
               }
               style={sparkStyle}
             />
 
             <div
               className={
-                game.comet.visible ? 'planet planet--ocean opacity-100' : 'planet planet--ocean opacity-0'
+                game.comet.visible
+                  ? game.comet.impactMs > 0
+                    ? 'planet planet--mars planet-impact opacity-100'
+                    : 'planet planet--mars opacity-100'
+                  : 'planet planet--mars opacity-0'
               }
               style={cometStyle}
             />
 
             <div
               className={
-                game.home.visible ? 'space-station opacity-100' : 'space-station opacity-0'
+                game.home.visible
+                  ? game.home.impactMs > 0
+                    ? 'space-sun planet-impact opacity-100'
+                    : 'space-sun opacity-100'
+                  : 'space-sun opacity-0'
               }
               style={homeStyle}
             />
 
             <div
               className={
-                game.hazard.visible ? 'planet planet--danger opacity-100' : 'planet planet--danger opacity-0'
+                game.hazard.visible
+                  ? game.hazard.impactMs > 0
+                    ? 'planet planet--hazard planet-impact opacity-100'
+                    : 'planet planet--hazard opacity-100'
+                  : 'planet planet--hazard opacity-0'
               }
               style={hazardStyle}
             />

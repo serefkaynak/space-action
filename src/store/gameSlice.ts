@@ -4,8 +4,8 @@ const DEFAULT_ARENA_WIDTH = 960
 const DEFAULT_ARENA_HEIGHT = 540
 
 const PLAYER_RADIUS = 18
-const HOME_RADIUS = 26
-const HAZARD_RADIUS = 20
+const HOME_RADIUS = 34
+const HAZARD_RADIUS = 21
 
 const MAX_PLAYER_SPEED = 8
 const PLAYER_CRUISE_SPEED = 7.2
@@ -34,10 +34,11 @@ type DynamicEntity = {
   radius: number
   visible: boolean
   cooldownMs: number
+  impactMs: number
 }
 
 type Collectible = DynamicEntity & {
-  id: 'spark' | 'comet'
+  id: 'earth' | 'mars'
   points: number
   threshold: number
 }
@@ -48,6 +49,7 @@ type HomePortal = {
   radius: number
   visible: boolean
   cooldownMs: number
+  impactMs: number
   points: number
   threshold: number
 }
@@ -77,6 +79,7 @@ export type GameState = {
   isGameOver: boolean
   announcement: string
   announcementTimerMs: number
+  planetChainMs: number
 }
 
 function randomBetween(min: number, max: number) {
@@ -117,6 +120,7 @@ function createCollectible(
     radius,
     visible: false,
     cooldownMs: 0,
+    impactMs: 0,
     points,
     threshold,
   }
@@ -131,7 +135,8 @@ function createHome(width: number, height: number): HomePortal {
     radius: HOME_RADIUS,
     visible: false,
     cooldownMs: 0,
-    points: 100,
+    impactMs: 0,
+    points: 120,
     threshold: HOME_THRESHOLD,
   }
 }
@@ -147,6 +152,7 @@ function createHazard(width: number, height: number): Hazard {
     radius: HAZARD_RADIUS,
     visible: false,
     cooldownMs: 0,
+    impactMs: 0,
     active: false,
   }
 }
@@ -183,9 +189,10 @@ function createInitialState(): GameState {
       radius: PLAYER_RADIUS,
       visible: true,
       cooldownMs: 0,
+      impactMs: 0,
     },
-    spark: createCollectible('spark', 10, SECOND_ORB_THRESHOLD, 14, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
-    comet: createCollectible('comet', 20, THIRD_ORB_THRESHOLD, 16, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
+    spark: createCollectible('earth', 15, SECOND_ORB_THRESHOLD, 16, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
+    comet: createCollectible('mars', 25, THIRD_ORB_THRESHOLD, 13, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
     home: createHome(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
     hazard: createHazard(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
     score: 0,
@@ -199,6 +206,7 @@ function createInitialState(): GameState {
     isGameOver: false,
     announcement: 'Hazır! Roketini yön tuşlarıyla hareket ettir.',
     announcementTimerMs: 2200,
+    planetChainMs: 0,
   }
 }
 
@@ -264,8 +272,121 @@ function collectPoints(state: GameState, points: number, text: string) {
   state.combo = Math.min(9, state.combo + 1)
   state.comboTimerMs = COMBO_WINDOW_MS
 
-    state.announcement = `${text} +${safePoints}`
+  state.announcement = `${text} +${safePoints}`
   state.announcementTimerMs = 1000
+}
+
+function getPlanetSourcePosition(state: GameState, source: 'earth' | 'mars' | 'sun' | 'hazard') {
+  if (source === 'earth') {
+    return { x: state.spark.x, y: state.spark.y }
+  }
+
+  if (source === 'mars') {
+    return { x: state.comet.x, y: state.comet.y }
+  }
+
+  if (source === 'hazard') {
+    return { x: state.hazard.x, y: state.hazard.y }
+  }
+
+  return { x: state.home.x, y: state.home.y }
+}
+
+function triggerPlanetImpact(state: GameState, source: 'earth' | 'mars' | 'sun' | 'hazard') {
+  const sourcePosition = getPlanetSourcePosition(state, source)
+  const strongImpact = 420
+  const lightImpact = 180
+
+  state.spark.impactMs = source === 'earth' ? strongImpact : Math.max(state.spark.impactMs, lightImpact)
+  state.comet.impactMs = source === 'mars' ? strongImpact : Math.max(state.comet.impactMs, lightImpact)
+  state.home.impactMs = source === 'sun' ? strongImpact : Math.max(state.home.impactMs, lightImpact)
+  state.hazard.impactMs = source === 'hazard' ? strongImpact : Math.max(state.hazard.impactMs, lightImpact)
+  state.planetChainMs = 220
+
+  const movingBodies = [state.spark, state.comet, state.hazard]
+
+  for (const entity of movingBodies) {
+    const dx = entity.x - sourcePosition.x
+    const dy = entity.y - sourcePosition.y
+    const distance = Math.hypot(dx, dy)
+
+    if (distance < 1) {
+      continue
+    }
+
+    const nx = dx / distance
+    const ny = dy / distance
+    const impulse = Math.max(0.24, 2.8 / Math.max(1, distance / 45))
+
+    entity.vx += nx * impulse
+    entity.vy += ny * impulse
+  }
+}
+
+function applySolarInfluence(state: GameState, frameScale: number) {
+  const movingBodies = [state.spark, state.comet, state.hazard]
+
+  for (const entity of movingBodies) {
+    const dx = state.home.x - entity.x
+    const dy = state.home.y - entity.y
+    const distance = Math.hypot(dx, dy)
+
+    if (distance < 1) {
+      continue
+    }
+
+    const nx = dx / distance
+    const ny = dy / distance
+    const gravity = Math.min(0.34, 2400 / Math.max(900, distance * distance)) * frameScale
+
+    entity.vx += nx * gravity
+    entity.vy += ny * gravity
+  }
+}
+
+function resolvePlanetPair(first: DynamicEntity, second: DynamicEntity) {
+  if (!first.visible || !second.visible) {
+    return
+  }
+
+  const dx = second.x - first.x
+  const dy = second.y - first.y
+  const distance = Math.hypot(dx, dy)
+  const minDistance = first.radius + second.radius
+
+  if (distance <= 0.001 || distance >= minDistance) {
+    return
+  }
+
+  const nx = dx / distance
+  const ny = dy / distance
+  const overlap = minDistance - distance
+
+  first.x -= nx * overlap * 0.5
+  first.y -= ny * overlap * 0.5
+  second.x += nx * overlap * 0.5
+  second.y += ny * overlap * 0.5
+
+  const firstNormalVelocity = first.vx * nx + first.vy * ny
+  const secondNormalVelocity = second.vx * nx + second.vy * ny
+  const relativeVelocity = secondNormalVelocity - firstNormalVelocity
+
+  if (relativeVelocity <= 0) {
+    const bounce = relativeVelocity * 0.9
+    first.vx += nx * bounce
+    first.vy += ny * bounce
+    second.vx -= nx * bounce
+    second.vy -= ny * bounce
+  }
+
+  first.impactMs = Math.max(first.impactMs, 170)
+  second.impactMs = Math.max(second.impactMs, 170)
+}
+
+function resolvePlanetCollisions(state: GameState) {
+  resolvePlanetPair(state.spark, state.comet)
+  resolvePlanetPair(state.spark, state.hazard)
+  resolvePlanetPair(state.comet, state.hazard)
 }
 
 function moveCollectible(state: GameState, collectible: Collectible, deltaMs: number, frameScale: number, playerSpeed: number) {
@@ -289,7 +410,9 @@ function moveCollectible(state: GameState, collectible: Collectible, deltaMs: nu
 
   if (getDistance(state.player, collectible) <= hitDistance) {
     const points = collectible.points * state.combo
-    collectPoints(state, points, collectible.id === 'spark' ? 'Gezegen yakalandı!' : 'Mavi gezegen yakalandı!')
+    const message = collectible.id === 'earth' ? 'Dünya yakalandı!' : 'Mars yakalandı!'
+    collectPoints(state, points, message)
+    triggerPlanetImpact(state, collectible.id)
 
     const nextPosition = randomPosition(state.arenaWidth, state.arenaHeight, collectible.radius)
     collectible.x = nextPosition.x
@@ -315,7 +438,8 @@ function moveHome(state: GameState, deltaMs: number, playerSpeed: number) {
 
   if (getDistance(state.player, state.home) <= hitDistance) {
     const points = state.home.points * state.combo
-    collectPoints(state, points, 'Uzay istasyonu bonusu!')
+    collectPoints(state, points, 'Güneş bonusu!')
+    triggerPlanetImpact(state, 'sun')
 
     const nextPosition = randomPosition(state.arenaWidth, state.arenaHeight, state.home.radius)
     state.home.x = nextPosition.x
@@ -348,8 +472,9 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
     state.combo = 1
     state.comboTimerMs = 0
 
-    state.announcement = 'Dikkat! Kızıl gezegene çarptın.'
+    state.announcement = 'Dikkat! Jüpiter fırtınasına çarptın.'
     state.announcementTimerMs = 1200
+    triggerPlanetImpact(state, 'hazard')
 
     const position = randomPosition(state.arenaWidth, state.arenaHeight, state.hazard.radius)
     state.hazard.x = position.x
@@ -459,8 +584,8 @@ const gameSlice = createSlice({
       state.player.x = width / 2
       state.player.y = height / 2
 
-      state.spark = createCollectible('spark', 10, SECOND_ORB_THRESHOLD, 14, width, height)
-      state.comet = createCollectible('comet', 20, THIRD_ORB_THRESHOLD, 16, width, height)
+      state.spark = createCollectible('earth', 15, SECOND_ORB_THRESHOLD, 16, width, height)
+      state.comet = createCollectible('mars', 25, THIRD_ORB_THRESHOLD, 13, width, height)
       state.home = createHome(width, height)
       state.hazard = createHazard(width, height)
 
@@ -547,10 +672,18 @@ const gameSlice = createSlice({
       const speed = Math.hypot(state.player.vx, state.player.vy)
       state.windMode = speed >= TURBO_WIND_SPEED
 
+      applySolarInfluence(state, frameScale)
       moveCollectible(state, state.spark, deltaMs, frameScale, speed)
       moveCollectible(state, state.comet, deltaMs, frameScale, speed)
       moveHome(state, deltaMs, speed)
       moveHazard(state, deltaMs, frameScale)
+      resolvePlanetCollisions(state)
+
+      state.spark.impactMs = Math.max(0, state.spark.impactMs - deltaMs)
+      state.comet.impactMs = Math.max(0, state.comet.impactMs - deltaMs)
+      state.home.impactMs = Math.max(0, state.home.impactMs - deltaMs)
+      state.hazard.impactMs = Math.max(0, state.hazard.impactMs - deltaMs)
+      state.planetChainMs = Math.max(0, state.planetChainMs - deltaMs)
 
       if (state.comboTimerMs > 0) {
         state.comboTimerMs = Math.max(0, state.comboTimerMs - deltaMs)
