@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
+} from 'react'
 import {
   nudgePlayer,
   resetPlayerPosition,
@@ -53,6 +61,7 @@ function App() {
   const [menu, setMenu] = useState<ContextMenuState>({ open: false, x: 0, y: 0 })
   const [joystickActive, setJoystickActive] = useState(false)
   const [joystickThumb, setJoystickThumb] = useState<JoystickThumb>({ x: 0, y: 0 })
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
 
   const speed = useMemo(
     () => Number(Math.hypot(game.player.vx, game.player.vy).toFixed(1)),
@@ -186,6 +195,23 @@ function App() {
   }, [dispatch])
 
   useEffect(() => {
+    const detectTouch = () => {
+      const coarsePointer = window.matchMedia('(pointer: coarse)').matches
+      const hoverNone = window.matchMedia('(hover: none)').matches
+      const touchPoints = navigator.maxTouchPoints > 0
+
+      setIsTouchDevice(coarsePointer || hoverNone || touchPoints)
+    }
+
+    detectTouch()
+    window.addEventListener('resize', detectTouch)
+
+    return () => {
+      window.removeEventListener('resize', detectTouch)
+    }
+  }, [])
+
+  useEffect(() => {
     const onWindowClick = () => {
       setMenu((current) => {
         if (!current.open) {
@@ -296,6 +322,40 @@ function App() {
     resetJoystickInput()
   }
 
+  const handleJoystickTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (game.isPaused || game.isGameOver) {
+      return
+    }
+
+    const touch = event.touches[0]
+    if (!touch) {
+      return
+    }
+
+    event.preventDefault()
+    setJoystickActive(true)
+    updateJoystickInput(touch.clientX, touch.clientY)
+  }
+
+  const handleJoystickTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (!joystickActive) {
+      return
+    }
+
+    const touch = event.touches[0]
+    if (!touch) {
+      return
+    }
+
+    event.preventDefault()
+    updateJoystickInput(touch.clientX, touch.clientY)
+  }
+
+  const handleJoystickTouchEnd = (event: ReactTouchEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    resetJoystickInput()
+  }
+
   const joystickThumbStyle = useMemo<CSSProperties>(
     () => ({
       transform: `translate(calc(-50% + ${joystickThumb.x}px), calc(-50% + ${joystickThumb.y}px))`,
@@ -349,7 +409,13 @@ function App() {
     : 'player-ship absolute'
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#12365f_0%,_#04111f_50%,_#020617_100%)] px-3 py-4 text-slate-100 md:px-6 md:py-6">
+    <main
+      className={
+        isTouchDevice
+          ? 'min-h-screen bg-[radial-gradient(circle_at_top,_#12365f_0%,_#04111f_50%,_#020617_100%)] px-3 py-4 pb-56 text-slate-100 md:px-6 md:py-6'
+          : 'min-h-screen bg-[radial-gradient(circle_at_top,_#12365f_0%,_#04111f_50%,_#020617_100%)] px-3 py-4 text-slate-100 md:px-6 md:py-6'
+      }
+    >
       <div className="mx-auto w-full max-w-[1450px]">
         <header className="glass-card stagger-entry rounded-3xl border border-cyan-200/20 px-5 py-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -570,7 +636,7 @@ function App() {
               <p className="mt-1 text-sm text-slate-200"><span className="font-semibold text-cyan-100">P:</span> Duraklat / devam</p>
               <p className="mt-1 text-sm text-slate-200"><span className="font-semibold text-cyan-100">Tablet:</span> Joystick alanına dokunup sürükle</p>
 
-              <div className="desktop-dpad mt-3 grid grid-cols-3 gap-2">
+              <div className={isTouchDevice ? 'desktop-dpad mt-3 hidden grid-cols-3 gap-2' : 'desktop-dpad mt-3 grid grid-cols-3 gap-2'}>
                 <div />
                 <ControlButton label="↑" direction={{ x: 0, y: -1 }} onPress={(vector) => dispatch(nudgePlayer(vector))} />
                 <div />
@@ -578,49 +644,9 @@ function App() {
                 <ControlButton label="↓" direction={{ x: 0, y: 1 }} onPress={(vector) => dispatch(nudgePlayer(vector))} />
                 <ControlButton label="→" direction={{ x: 1, y: 0 }} onPress={(vector) => dispatch(nudgePlayer(vector))} />
               </div>
-
-              <div className="tablet-touch-controls mt-4">
-                <div className="tablet-touch-layout">
-                  <div
-                    ref={joystickRef}
-                    className={joystickActive ? 'virtual-joystick virtual-joystick--active' : 'virtual-joystick'}
-                    onPointerDown={handleJoystickPointerDown}
-                    onPointerMove={handleJoystickPointerMove}
-                    onPointerUp={handleJoystickPointerUp}
-                    onPointerCancel={handleJoystickPointerUp}
-                  >
-                    <div className="virtual-joystick__rings" />
-                    <div className="virtual-joystick__thumb" style={joystickThumbStyle} />
-                  </div>
-
-                  <div className="tablet-action-stack">
-                    <button
-                      type="button"
-                      className="tablet-action-button"
-                      onClick={() => dispatch(stopPlayer())}
-                    >
-                      Gemiyi Durdur
-                    </button>
-                    <button
-                      type="button"
-                      className="tablet-action-button"
-                      onClick={() => dispatch(resetPlayerPosition())}
-                    >
-                      Merkeze Al
-                    </button>
-                    <button
-                      type="button"
-                      className="tablet-action-button"
-                      onClick={() => {
-                        resetJoystickInput()
-                        dispatch(togglePause())
-                      }}
-                    >
-                      {game.isPaused ? 'Devam Et' : 'Duraklat'}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <p className={isTouchDevice ? 'mt-3 text-xs uppercase tracking-[0.18em] text-cyan-100/80' : 'hidden'}>
+                Dokunmatik joystick ekranın altına taşındı.
+              </p>
             </div>
 
             <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">
@@ -633,6 +659,55 @@ function App() {
           </aside>
         </section>
       </div>
+
+      {isTouchDevice ? (
+        <div className="touch-control-dock">
+          <div className="touch-control-dock__inner">
+            <div
+              ref={joystickRef}
+              className={joystickActive ? 'virtual-joystick virtual-joystick--active' : 'virtual-joystick'}
+              onPointerDown={handleJoystickPointerDown}
+              onPointerMove={handleJoystickPointerMove}
+              onPointerUp={handleJoystickPointerUp}
+              onPointerCancel={handleJoystickPointerUp}
+              onTouchStart={handleJoystickTouchStart}
+              onTouchMove={handleJoystickTouchMove}
+              onTouchEnd={handleJoystickTouchEnd}
+              onTouchCancel={handleJoystickTouchEnd}
+            >
+              <div className="virtual-joystick__rings" />
+              <div className="virtual-joystick__thumb" style={joystickThumbStyle} />
+            </div>
+
+            <div className="tablet-action-stack">
+              <button
+                type="button"
+                className="tablet-action-button"
+                onClick={() => dispatch(stopPlayer())}
+              >
+                Durdur
+              </button>
+              <button
+                type="button"
+                className="tablet-action-button"
+                onClick={() => dispatch(resetPlayerPosition())}
+              >
+                Merkez
+              </button>
+              <button
+                type="button"
+                className="tablet-action-button"
+                onClick={() => {
+                  resetJoystickInput()
+                  dispatch(togglePause())
+                }}
+              >
+                {game.isPaused ? 'Devam' : 'Duraklat'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }
