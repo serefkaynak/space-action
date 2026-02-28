@@ -7,19 +7,16 @@ const PLAYER_RADIUS = 18
 const HOME_RADIUS = 34
 const HAZARD_RADIUS = 21
 
-const MAX_PLAYER_SPEED = 8
-const PLAYER_CRUISE_SPEED = 7.2
-const TURBO_WIND_SPEED = 4.8
-const SECOND_ORB_THRESHOLD = 2.2
-const THIRD_ORB_THRESHOLD = 3.5
-const HOME_THRESHOLD = 5.2
-
-const STEERING_RESPONSE = 0.34
-const IDLE_DAMPING = 0.9
-const MIN_DRIFT_SPEED = 1.15
-const PLAYER_BOUNCE_DAMPING = 0.9
-const LEVEL_SCORE_STEP = 180
 const COMBO_WINDOW_MS = 3200
+const SHIELD_INVULNERABILITY_MS = 1800
+const HIT_INVULNERABILITY_MS = 1300
+const MAX_SOUND_VOLUME = 0.6
+const DEFAULT_SESSION_REMINDER_MS = 20 * 60 * 1000
+
+export type Difficulty = 'easy' | 'normal' | 'hard'
+export type ControlSide = 'left' | 'right'
+export type RocketSkin = 'classic' | 'neon' | 'comet' | 'solar'
+export type MissionKind = 'earth' | 'mars' | 'sun' | 'survive'
 
 export type Vector = {
   x: number
@@ -58,9 +55,185 @@ type Hazard = DynamicEntity & {
   active: boolean
 }
 
+type ParentSettings = {
+  soundVolume: number
+  vibrationEnabled: boolean
+  sessionReminderEnabled: boolean
+  sessionReminderMs: number
+}
+
+type MissionState = {
+  id: string
+  label: string
+  kind: MissionKind
+  target: number
+  progress: number
+  rewardPoints: number
+  timeLimitMs: number
+  timeLeftMs: number
+}
+
+type PlanetCatchStats = {
+  earth: number
+  mars: number
+  sun: number
+}
+
+type EventSignal = {
+  collect: number
+  hit: number
+  mission: number
+  badge: number
+  level: number
+  unlock: number
+  shield: number
+}
+
+type DifficultyConfig = {
+  maxSpeed: number
+  cruiseSpeed: number
+  windThreshold: number
+  steeringResponse: number
+  idleDamping: number
+  minDriftSpeed: number
+  playerBounceDamping: number
+  secondThreshold: number
+  thirdThreshold: number
+  sunThreshold: number
+  earthPoints: number
+  marsPoints: number
+  sunPoints: number
+  baseLives: number
+  baseShieldCharges: number
+  hazardUnlockLevel: number
+  hazardSpeedMultiplier: number
+  solarInfluence: number
+  levelScoreStep: number
+  missionTargetScale: number
+  missionRewardScale: number
+}
+
+const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
+  easy: {
+    maxSpeed: 7,
+    cruiseSpeed: 6.2,
+    windThreshold: 4,
+    steeringResponse: 0.38,
+    idleDamping: 0.92,
+    minDriftSpeed: 1,
+    playerBounceDamping: 0.94,
+    secondThreshold: 1.8,
+    thirdThreshold: 3,
+    sunThreshold: 4.5,
+    earthPoints: 14,
+    marsPoints: 22,
+    sunPoints: 110,
+    baseLives: 5,
+    baseShieldCharges: 3,
+    hazardUnlockLevel: 3,
+    hazardSpeedMultiplier: 0.88,
+    solarInfluence: 0.8,
+    levelScoreStep: 230,
+    missionTargetScale: 0.85,
+    missionRewardScale: 1,
+  },
+  normal: {
+    maxSpeed: 8,
+    cruiseSpeed: 7.2,
+    windThreshold: 4.8,
+    steeringResponse: 0.34,
+    idleDamping: 0.9,
+    minDriftSpeed: 1.15,
+    playerBounceDamping: 0.9,
+    secondThreshold: 2.2,
+    thirdThreshold: 3.5,
+    sunThreshold: 5.2,
+    earthPoints: 16,
+    marsPoints: 24,
+    sunPoints: 120,
+    baseLives: 4,
+    baseShieldCharges: 2,
+    hazardUnlockLevel: 2,
+    hazardSpeedMultiplier: 1,
+    solarInfluence: 1,
+    levelScoreStep: 200,
+    missionTargetScale: 1,
+    missionRewardScale: 1.12,
+  },
+  hard: {
+    maxSpeed: 9.3,
+    cruiseSpeed: 8.1,
+    windThreshold: 5.6,
+    steeringResponse: 0.31,
+    idleDamping: 0.88,
+    minDriftSpeed: 1.2,
+    playerBounceDamping: 0.86,
+    secondThreshold: 2.8,
+    thirdThreshold: 4.2,
+    sunThreshold: 6,
+    earthPoints: 18,
+    marsPoints: 30,
+    sunPoints: 145,
+    baseLives: 3,
+    baseShieldCharges: 1,
+    hazardUnlockLevel: 1,
+    hazardSpeedMultiplier: 1.2,
+    solarInfluence: 1.2,
+    levelScoreStep: 170,
+    missionTargetScale: 1.2,
+    missionRewardScale: 1.28,
+  },
+}
+
+const PLANET_FACTS: Record<'earth' | 'mars' | 'sun' | 'hazard', string> = {
+  earth: 'Dunya, yuzeyinde sivisi halde su bulunan tek bilinen gezegendir.',
+  mars: 'Mars kizil gorunur; sebebi yuzeyindeki demir oksittir.',
+  sun: 'Gunes, Gunes Sistemi kutlesinin neredeyse tamamina sahiptir.',
+  hazard: 'Jupiter dev bir gaz gezegenidir ve Buyuk Kirmizi Leke dev bir firtinadir.',
+}
+
+const MISSION_TEMPLATES: Array<{
+  kind: MissionKind
+  label: string
+  baseTarget: number
+  baseReward: number
+  timeMs: number
+}> = [
+  {
+    kind: 'earth',
+    label: '2 Dunya yakala',
+    baseTarget: 2,
+    baseReward: 50,
+    timeMs: 34000,
+  },
+  {
+    kind: 'mars',
+    label: '2 Mars yakala',
+    baseTarget: 2,
+    baseReward: 75,
+    timeMs: 36000,
+  },
+  {
+    kind: 'sun',
+    label: '1 Gunes bonusu al',
+    baseTarget: 1,
+    baseReward: 95,
+    timeMs: 35000,
+  },
+  {
+    kind: 'survive',
+    label: '22 saniye hayatta kal',
+    baseTarget: 22,
+    baseReward: 70,
+    timeMs: 30000,
+  },
+]
+
 export type GameState = {
   arenaWidth: number
   arenaHeight: number
+  difficulty: Difficulty
+  controlSide: ControlSide
   input: Vector
   lastDirection: Vector
   player: DynamicEntity
@@ -74,12 +247,28 @@ export type GameState = {
   comboTimerMs: number
   level: number
   lives: number
+  shieldCharges: number
+  invulnerabilityMs: number
+  secondChanceUsed: boolean
   windMode: boolean
   isPaused: boolean
   isGameOver: boolean
   announcement: string
   announcementTimerMs: number
   planetChainMs: number
+  missionsCompleted: number
+  missionSeed: number
+  currentMission: MissionState
+  planetCatches: PlanetCatchStats
+  learningFact: string
+  learningFactTimerMs: number
+  unlockedSkins: RocketSkin[]
+  selectedSkin: RocketSkin
+  badges: string[]
+  settings: ParentSettings
+  sessionElapsedMs: number
+  showBreakReminder: boolean
+  eventSignal: EventSignal
 }
 
 function randomBetween(min: number, max: number) {
@@ -99,6 +288,25 @@ function clampPosition(value: number, min: number, max: number) {
 
 function getDistance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+function getDifficultyConfig(difficulty: Difficulty) {
+  return DIFFICULTY_CONFIGS[difficulty]
+}
+
+function loadStoredHighScore() {
+  if (typeof window === 'undefined') {
+    return 0
+  }
+
+  const rawValue = window.localStorage.getItem('space-action-high-score')
+  const parsed = Number(rawValue)
+
+  if (!Number.isFinite(parsed)) {
+    return 0
+  }
+
+  return Math.max(0, Math.floor(parsed))
 }
 
 function createCollectible(
@@ -126,7 +334,7 @@ function createCollectible(
   }
 }
 
-function createHome(width: number, height: number): HomePortal {
+function createHome(points: number, threshold: number, width: number, height: number): HomePortal {
   const position = randomPosition(width, height, HOME_RADIUS)
 
   return {
@@ -136,8 +344,8 @@ function createHome(width: number, height: number): HomePortal {
     visible: false,
     cooldownMs: 0,
     impactMs: 0,
-    points: 120,
-    threshold: HOME_THRESHOLD,
+    points,
+    threshold,
   }
 }
 
@@ -157,33 +365,51 @@ function createHazard(width: number, height: number): Hazard {
   }
 }
 
-function loadStoredHighScore() {
-  if (typeof window === 'undefined') {
-    return 0
+function createMission(seed: number, difficulty: Difficulty): MissionState {
+  const template = MISSION_TEMPLATES[seed % MISSION_TEMPLATES.length]
+  const config = getDifficultyConfig(difficulty)
+
+  const target = Math.max(1, Math.round(template.baseTarget * config.missionTargetScale))
+  const rewardPoints = Math.max(25, Math.round(template.baseReward * config.missionRewardScale))
+
+  return {
+    id: `mission-${seed}`,
+    kind: template.kind,
+    label: template.label,
+    target,
+    progress: 0,
+    rewardPoints,
+    timeLimitMs: template.timeMs,
+    timeLeftMs: template.timeMs,
   }
+}
 
-  const rawValue = window.localStorage.getItem('space-action-high-score')
-  const parsed = Number(rawValue)
-
-  if (!Number.isFinite(parsed)) {
-    return 0
+function emptyEventSignal(): EventSignal {
+  return {
+    collect: 0,
+    hit: 0,
+    mission: 0,
+    badge: 0,
+    level: 0,
+    unlock: 0,
+    shield: 0,
   }
-
-  return Math.max(0, Math.floor(parsed))
 }
 
 function createInitialState(): GameState {
-  const centerX = DEFAULT_ARENA_WIDTH / 2
-  const centerY = DEFAULT_ARENA_HEIGHT / 2
+  const difficulty: Difficulty = 'normal'
+  const config = getDifficultyConfig(difficulty)
 
-  return {
+  const baseState: GameState = {
     arenaWidth: DEFAULT_ARENA_WIDTH,
     arenaHeight: DEFAULT_ARENA_HEIGHT,
+    difficulty,
+    controlSide: 'left',
     input: { x: 0, y: 0 },
     lastDirection: { x: 0, y: 0 },
     player: {
-      x: centerX,
-      y: centerY,
+      x: DEFAULT_ARENA_WIDTH / 2,
+      y: DEFAULT_ARENA_HEIGHT / 2,
       vx: 0,
       vy: 0,
       radius: PLAYER_RADIUS,
@@ -191,59 +417,55 @@ function createInitialState(): GameState {
       cooldownMs: 0,
       impactMs: 0,
     },
-    spark: createCollectible('earth', 15, SECOND_ORB_THRESHOLD, 16, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
-    comet: createCollectible('mars', 25, THIRD_ORB_THRESHOLD, 13, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
-    home: createHome(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
+    spark: createCollectible('earth', config.earthPoints, config.secondThreshold, 16, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
+    comet: createCollectible('mars', config.marsPoints, config.thirdThreshold, 13, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
+    home: createHome(config.sunPoints, config.sunThreshold, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
     hazard: createHazard(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
     score: 0,
     highScore: loadStoredHighScore(),
     combo: 1,
     comboTimerMs: 0,
     level: 1,
-    lives: 3,
+    lives: config.baseLives,
+    shieldCharges: config.baseShieldCharges,
+    invulnerabilityMs: 0,
+    secondChanceUsed: false,
     windMode: false,
     isPaused: false,
     isGameOver: false,
-    announcement: 'Hazır! Roketini yön tuşlarıyla hareket ettir.',
+    announcement: 'Hazir! Roketini yon tuslariyla hareket ettir.',
     announcementTimerMs: 2200,
     planetChainMs: 0,
+    missionsCompleted: 0,
+    missionSeed: 0,
+    currentMission: createMission(0, difficulty),
+    planetCatches: {
+      earth: 0,
+      mars: 0,
+      sun: 0,
+    },
+    learningFact: '',
+    learningFactTimerMs: 0,
+    unlockedSkins: ['classic'],
+    selectedSkin: 'classic',
+    badges: [],
+    settings: {
+      soundVolume: 0.45,
+      vibrationEnabled: true,
+      sessionReminderEnabled: true,
+      sessionReminderMs: DEFAULT_SESSION_REMINDER_MS,
+    },
+    sessionElapsedMs: 0,
+    showBreakReminder: false,
+    eventSignal: emptyEventSignal(),
   }
+
+  return baseState
 }
 
-function bounceInsideArena(
-  entity: DynamicEntity,
-  width: number,
-  height: number,
-  movementScale: number,
-  bounceDamping = 1,
-) {
-  entity.x += entity.vx * movementScale
-  entity.y += entity.vy * movementScale
-
-  const minX = entity.radius
-  const maxX = Math.max(entity.radius, width - entity.radius)
-  const minY = entity.radius
-  const maxY = Math.max(entity.radius, height - entity.radius)
-
-  if (entity.x <= minX) {
-    entity.x = minX
-    entity.vx = Math.abs(entity.vx) * bounceDamping
-  }
-
-  if (entity.x >= maxX) {
-    entity.x = maxX
-    entity.vx = -Math.abs(entity.vx) * bounceDamping
-  }
-
-  if (entity.y <= minY) {
-    entity.y = minY
-    entity.vy = Math.abs(entity.vy) * bounceDamping
-  }
-
-  if (entity.y >= maxY) {
-    entity.y = maxY
-    entity.vy = -Math.abs(entity.vy) * bounceDamping
-  }
+function setAnnouncement(state: GameState, text: string, timerMs = 1000) {
+  state.announcement = text
+  state.announcementTimerMs = timerMs
 }
 
 function refreshHighScore(state: GameState) {
@@ -252,13 +474,117 @@ function refreshHighScore(state: GameState) {
   }
 }
 
+function incrementEvent(state: GameState, key: keyof EventSignal) {
+  state.eventSignal[key] += 1
+}
+
+function unlockSkin(state: GameState, skin: RocketSkin, message: string) {
+  if (state.unlockedSkins.includes(skin)) {
+    return
+  }
+
+  state.unlockedSkins.push(skin)
+  incrementEvent(state, 'unlock')
+  setAnnouncement(state, message, 1700)
+}
+
+function grantBadge(state: GameState, badgeId: string, message: string) {
+  if (state.badges.includes(badgeId)) {
+    return
+  }
+
+  state.badges.push(badgeId)
+  incrementEvent(state, 'badge')
+  setAnnouncement(state, message, 1700)
+}
+
+function setLearningFact(state: GameState, key: 'earth' | 'mars' | 'sun' | 'hazard') {
+  state.learningFact = PLANET_FACTS[key]
+  state.learningFactTimerMs = 6200
+}
+
 function maybeLevelUp(state: GameState) {
-  const nextLevel = Math.floor(state.score / LEVEL_SCORE_STEP) + 1
+  const config = getDifficultyConfig(state.difficulty)
+  const nextLevel = Math.floor(state.score / config.levelScoreStep) + 1
 
   if (nextLevel > state.level) {
     state.level = nextLevel
-    state.announcement = `Seviye ${state.level}!`
-    state.announcementTimerMs = 1400
+    state.shieldCharges = Math.min(5, state.shieldCharges + 1)
+    incrementEvent(state, 'level')
+    setAnnouncement(state, `Seviye ${state.level}!`, 1400)
+  }
+}
+
+function checkUnlocksAndBadges(state: GameState) {
+  if (state.score >= 160) {
+    unlockSkin(state, 'neon', 'Yeni roket skini acildi: Neon!')
+  }
+
+  if (state.missionsCompleted >= 3) {
+    unlockSkin(state, 'comet', 'Yeni roket skini acildi: Kuyruklu Yildiz!')
+  }
+
+  if (state.planetCatches.sun >= 5) {
+    unlockSkin(state, 'solar', 'Yeni roket skini acildi: Solar Core!')
+  }
+
+  if (state.missionsCompleted >= 1) {
+    grantBadge(state, 'mission-starter', 'Rozet acildi: Gorev Baslangici')
+  }
+
+  if (state.planetCatches.mars >= 6) {
+    grantBadge(state, 'mars-collector', 'Rozet acildi: Mars Koleksiyoncusu')
+  }
+
+  if (state.score >= 500) {
+    grantBadge(state, 'score-500', 'Rozet acildi: 500+ Puan')
+  }
+
+  if (state.sessionElapsedMs >= 3 * 60 * 1000) {
+    grantBadge(state, 'space-marathon', 'Rozet acildi: Uzay Maratoncusu')
+  }
+}
+
+function createNextMission(state: GameState) {
+  state.missionSeed += 1
+  state.currentMission = createMission(state.missionSeed, state.difficulty)
+}
+
+function completeMission(state: GameState) {
+  const reward = state.currentMission.rewardPoints
+
+  state.score += reward
+  refreshHighScore(state)
+  maybeLevelUp(state)
+
+  state.missionsCompleted += 1
+  state.shieldCharges = Math.min(5, state.shieldCharges + 1)
+  state.lives = Math.min(getDifficultyConfig(state.difficulty).baseLives + 1, state.lives + 1)
+
+  incrementEvent(state, 'mission')
+  setAnnouncement(state, `Gorev tamamlandi! +${reward}`, 1600)
+
+  checkUnlocksAndBadges(state)
+  createNextMission(state)
+}
+
+function failMission(state: GameState) {
+  setAnnouncement(state, 'Gorev suresi doldu. Yeni gorev geldi!', 1500)
+  createNextMission(state)
+}
+
+function progressMission(state: GameState, kind: MissionKind, amount: number) {
+  if (state.currentMission.kind !== kind) {
+    return
+  }
+
+  state.currentMission.progress = Math.min(
+    state.currentMission.target,
+    state.currentMission.progress + amount,
+  )
+
+  if (state.currentMission.progress >= state.currentMission.target) {
+    completeMission(state)
   }
 }
 
@@ -272,8 +598,10 @@ function collectPoints(state: GameState, points: number, text: string) {
   state.combo = Math.min(9, state.combo + 1)
   state.comboTimerMs = COMBO_WINDOW_MS
 
-  state.announcement = `${text} +${safePoints}`
-  state.announcementTimerMs = 1000
+  incrementEvent(state, 'collect')
+  setAnnouncement(state, `${text} +${safePoints}`, 1000)
+
+  checkUnlocksAndBadges(state)
 }
 
 function getPlanetSourcePosition(state: GameState, source: 'earth' | 'mars' | 'sun' | 'hazard') {
@@ -324,6 +652,7 @@ function triggerPlanetImpact(state: GameState, source: 'earth' | 'mars' | 'sun' 
 }
 
 function applySolarInfluence(state: GameState, frameScale: number) {
+  const config = getDifficultyConfig(state.difficulty)
   const movingBodies = [state.spark, state.comet, state.hazard]
 
   for (const entity of movingBodies) {
@@ -337,10 +666,46 @@ function applySolarInfluence(state: GameState, frameScale: number) {
 
     const nx = dx / distance
     const ny = dy / distance
-    const gravity = Math.min(0.34, 2400 / Math.max(900, distance * distance)) * frameScale
+    const gravity = Math.min(0.38, 2400 / Math.max(900, distance * distance)) * frameScale * config.solarInfluence
 
     entity.vx += nx * gravity
     entity.vy += ny * gravity
+  }
+}
+
+function bounceInsideArena(
+  entity: DynamicEntity,
+  width: number,
+  height: number,
+  movementScale: number,
+  bounceDamping = 1,
+) {
+  entity.x += entity.vx * movementScale
+  entity.y += entity.vy * movementScale
+
+  const minX = entity.radius
+  const maxX = Math.max(entity.radius, width - entity.radius)
+  const minY = entity.radius
+  const maxY = Math.max(entity.radius, height - entity.radius)
+
+  if (entity.x <= minX) {
+    entity.x = minX
+    entity.vx = Math.abs(entity.vx) * bounceDamping
+  }
+
+  if (entity.x >= maxX) {
+    entity.x = maxX
+    entity.vx = -Math.abs(entity.vx) * bounceDamping
+  }
+
+  if (entity.y <= minY) {
+    entity.y = minY
+    entity.vy = Math.abs(entity.vy) * bounceDamping
+  }
+
+  if (entity.y >= maxY) {
+    entity.y = maxY
+    entity.vy = -Math.abs(entity.vy) * bounceDamping
   }
 }
 
@@ -389,7 +754,64 @@ function resolvePlanetCollisions(state: GameState) {
   resolvePlanetPair(state.comet, state.hazard)
 }
 
-function moveCollectible(state: GameState, collectible: Collectible, deltaMs: number, frameScale: number, playerSpeed: number) {
+function setupRound(state: GameState, message: string) {
+  const config = getDifficultyConfig(state.difficulty)
+  const width = state.arenaWidth
+  const height = state.arenaHeight
+
+  state.input = { x: 0, y: 0 }
+  state.lastDirection = { x: 0, y: 0 }
+
+  state.player = {
+    x: width / 2,
+    y: height / 2,
+    vx: 0,
+    vy: 0,
+    radius: PLAYER_RADIUS,
+    visible: true,
+    cooldownMs: 0,
+    impactMs: 0,
+  }
+
+  state.spark = createCollectible('earth', config.earthPoints, config.secondThreshold, 16, width, height)
+  state.comet = createCollectible('mars', config.marsPoints, config.thirdThreshold, 13, width, height)
+  state.home = createHome(config.sunPoints, config.sunThreshold, width, height)
+  state.hazard = createHazard(width, height)
+
+  state.score = 0
+  state.combo = 1
+  state.comboTimerMs = 0
+  state.level = 1
+  state.lives = config.baseLives
+  state.shieldCharges = config.baseShieldCharges
+  state.invulnerabilityMs = 0
+  state.secondChanceUsed = false
+  state.windMode = false
+  state.isPaused = false
+  state.isGameOver = false
+  state.planetChainMs = 0
+
+  state.currentMission = createMission(state.missionSeed + 1, state.difficulty)
+  state.missionSeed += 1
+
+  state.learningFact = ''
+  state.learningFactTimerMs = 0
+
+  state.sessionElapsedMs = 0
+  state.showBreakReminder = false
+
+  state.eventSignal = emptyEventSignal()
+
+  setAnnouncement(state, message, 1600)
+}
+
+function moveCollectible(
+  state: GameState,
+  collectible: Collectible,
+  deltaMs: number,
+  frameScale: number,
+  playerSpeed: number,
+) {
   collectible.visible = playerSpeed >= collectible.threshold
 
   if (!collectible.visible) {
@@ -410,8 +832,19 @@ function moveCollectible(state: GameState, collectible: Collectible, deltaMs: nu
 
   if (getDistance(state.player, collectible) <= hitDistance) {
     const points = collectible.points * state.combo
-    const message = collectible.id === 'earth' ? 'Dünya yakalandı!' : 'Mars yakalandı!'
-    collectPoints(state, points, message)
+
+    if (collectible.id === 'earth') {
+      collectPoints(state, points, 'Dunya yakalandi!')
+      state.planetCatches.earth += 1
+      setLearningFact(state, 'earth')
+      progressMission(state, 'earth', 1)
+    } else {
+      collectPoints(state, points, 'Mars yakalandi!')
+      state.planetCatches.mars += 1
+      setLearningFact(state, 'mars')
+      progressMission(state, 'mars', 1)
+    }
+
     triggerPlanetImpact(state, collectible.id)
 
     const nextPosition = randomPosition(state.arenaWidth, state.arenaHeight, collectible.radius)
@@ -438,7 +871,11 @@ function moveHome(state: GameState, deltaMs: number, playerSpeed: number) {
 
   if (getDistance(state.player, state.home) <= hitDistance) {
     const points = state.home.points * state.combo
-    collectPoints(state, points, 'Güneş bonusu!')
+    collectPoints(state, points, 'Gunes bonusu!')
+    state.planetCatches.sun += 1
+    setLearningFact(state, 'sun')
+    progressMission(state, 'sun', 1)
+
     triggerPlanetImpact(state, 'sun')
 
     const nextPosition = randomPosition(state.arenaWidth, state.arenaHeight, state.home.radius)
@@ -449,14 +886,16 @@ function moveHome(state: GameState, deltaMs: number, playerSpeed: number) {
 }
 
 function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
-  state.hazard.active = state.level >= 2
+  const config = getDifficultyConfig(state.difficulty)
+
+  state.hazard.active = state.level >= config.hazardUnlockLevel
   state.hazard.visible = state.hazard.active
 
   if (!state.hazard.active) {
     return
   }
 
-  const levelBoost = 1.1 + (state.level - 1) * 0.1
+  const levelBoost = (1.08 + (state.level - 1) * 0.09) * config.hazardSpeedMultiplier
 
   bounceInsideArena(state.hazard, state.arenaWidth, state.arenaHeight, frameScale * levelBoost)
 
@@ -468,13 +907,35 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
   const hitDistance = state.player.radius + state.hazard.radius
 
   if (getDistance(state.player, state.hazard) <= hitDistance) {
+    triggerPlanetImpact(state, 'hazard')
+
+    if (state.invulnerabilityMs > 0) {
+      state.hazard.cooldownMs = 500
+      return
+    }
+
+    if (state.shieldCharges > 0) {
+      state.shieldCharges -= 1
+      state.invulnerabilityMs = SHIELD_INVULNERABILITY_MS
+      incrementEvent(state, 'shield')
+      setAnnouncement(state, 'Kalkan seni korudu!', 1100)
+      setLearningFact(state, 'hazard')
+
+      const safePosition = randomPosition(state.arenaWidth, state.arenaHeight, state.hazard.radius)
+      state.hazard.x = safePosition.x
+      state.hazard.y = safePosition.y
+      state.hazard.cooldownMs = 900
+      return
+    }
+
     state.lives -= 1
     state.combo = 1
     state.comboTimerMs = 0
+    state.invulnerabilityMs = HIT_INVULNERABILITY_MS
+    incrementEvent(state, 'hit')
 
-    state.announcement = 'Dikkat! Jüpiter fırtınasına çarptın.'
-    state.announcementTimerMs = 1200
-    triggerPlanetImpact(state, 'hazard')
+    setAnnouncement(state, 'Dikkat! Jupiter firtinasina carptin.', 1200)
+    setLearningFact(state, 'hazard')
 
     const position = randomPosition(state.arenaWidth, state.arenaHeight, state.hazard.radius)
     state.hazard.x = position.x
@@ -482,13 +943,21 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
     state.hazard.cooldownMs = 1200
 
     if (state.lives <= 0) {
-      state.isGameOver = true
-      state.isPaused = true
-      state.input = { x: 0, y: 0 }
-      state.player.vx = 0
-      state.player.vy = 0
-      state.announcement = 'Görev bitti! Yeniden başla.'
-      state.announcementTimerMs = 2500
+      if (!state.secondChanceUsed) {
+        state.secondChanceUsed = true
+        state.lives = 1
+        state.shieldCharges = Math.max(state.shieldCharges, 1)
+        state.invulnerabilityMs = 2600
+        incrementEvent(state, 'shield')
+        setAnnouncement(state, 'Son sans devrede! Devam et!', 1800)
+      } else {
+        state.isGameOver = true
+        state.isPaused = true
+        state.input = { x: 0, y: 0 }
+        state.player.vx = 0
+        state.player.vy = 0
+        setAnnouncement(state, 'Gorev bitti! Yeniden basla.', 2500)
+      }
     }
   }
 }
@@ -526,18 +995,65 @@ const gameSlice = createSlice({
     setInput: (state, action: PayloadAction<Vector>) => {
       state.input = action.payload
     },
+    setDifficulty: (state, action: PayloadAction<Difficulty>) => {
+      if (state.difficulty === action.payload) {
+        return
+      }
+
+      state.difficulty = action.payload
+      setupRound(state, `Zorluk ayarlandi: ${action.payload.toUpperCase()}`)
+    },
+    setControlSide: (state, action: PayloadAction<ControlSide>) => {
+      state.controlSide = action.payload
+    },
+    setSoundVolume: (state, action: PayloadAction<number>) => {
+      const clamped = Math.max(0, Math.min(MAX_SOUND_VOLUME, action.payload))
+      state.settings.soundVolume = clamped
+    },
+    setVibrationEnabled: (state, action: PayloadAction<boolean>) => {
+      state.settings.vibrationEnabled = action.payload
+    },
+    setSessionReminderEnabled: (state, action: PayloadAction<boolean>) => {
+      state.settings.sessionReminderEnabled = action.payload
+
+      if (!action.payload) {
+        state.showBreakReminder = false
+      }
+    },
+    setSessionReminderMinutes: (state, action: PayloadAction<number>) => {
+      const safeMinutes = Math.max(10, Math.min(45, Math.round(action.payload)))
+      state.settings.sessionReminderMs = safeMinutes * 60 * 1000
+    },
+    dismissBreakReminder: (state) => {
+      state.showBreakReminder = false
+      state.sessionElapsedMs = 0
+
+      if (!state.isGameOver) {
+        state.isPaused = false
+        setAnnouncement(state, 'Mola tamam! Devam ediyoruz.', 1200)
+      }
+    },
+    selectRocketSkin: (state, action: PayloadAction<RocketSkin>) => {
+      if (!state.unlockedSkins.includes(action.payload)) {
+        return
+      }
+
+      state.selectedSkin = action.payload
+    },
     nudgePlayer: (state, action: PayloadAction<Vector>) => {
       if (state.isGameOver || state.isPaused) {
         return
       }
+
+      const config = getDifficultyConfig(state.difficulty)
 
       state.player.vx += action.payload.x * 1.1
       state.player.vy += action.payload.y * 1.1
 
       const tapSpeed = Math.hypot(state.player.vx, state.player.vy)
 
-      if (tapSpeed > MAX_PLAYER_SPEED && tapSpeed > 0) {
-        const ratio = MAX_PLAYER_SPEED / tapSpeed
+      if (tapSpeed > config.maxSpeed && tapSpeed > 0) {
+        const ratio = config.maxSpeed / tapSpeed
         state.player.vx *= ratio
         state.player.vy *= ratio
       }
@@ -557,46 +1073,25 @@ const gameSlice = createSlice({
       state.combo = 1
       state.comboTimerMs = 0
 
-      state.announcement = 'Roket merkeze alındı.'
-      state.announcementTimerMs = 1000
+      setAnnouncement(state, 'Roket merkeze alindi.', 1000)
     },
     togglePause: (state) => {
-      if (state.isGameOver) {
+      if (state.isGameOver || state.showBreakReminder) {
         return
       }
 
       state.isPaused = !state.isPaused
-      state.announcement = state.isPaused ? 'Duraklatıldı' : 'Devam!'
-      state.announcementTimerMs = 700
+      setAnnouncement(state, state.isPaused ? 'Duraklatildi' : 'Devam!', 700)
     },
     restartGame: (state) => {
-      const highScore = state.highScore
-      const width = state.arenaWidth
-      const height = state.arenaHeight
-      const freshState = createInitialState()
-
-      Object.assign(state, freshState)
-
-      state.highScore = Math.max(highScore, freshState.highScore)
-      state.arenaWidth = width
-      state.arenaHeight = height
-
-      state.player.x = width / 2
-      state.player.y = height / 2
-
-      state.spark = createCollectible('earth', 15, SECOND_ORB_THRESHOLD, 16, width, height)
-      state.comet = createCollectible('mars', 25, THIRD_ORB_THRESHOLD, 13, width, height)
-      state.home = createHome(width, height)
-      state.hazard = createHazard(width, height)
-
-      state.announcement = 'Yeni oyun başladı!'
-      state.announcementTimerMs = 1500
+      setupRound(state, 'Yeni oyun basladi!')
     },
     tick: (state, action: PayloadAction<{ deltaMs: number }>) => {
-      if (state.isPaused || state.isGameOver) {
+      if (state.isPaused || state.isGameOver || state.showBreakReminder) {
         return
       }
 
+      const config = getDifficultyConfig(state.difficulty)
       const deltaMs = Math.min(48, Math.max(8, action.payload.deltaMs))
       const frameScale = deltaMs / 16.6667
 
@@ -609,15 +1104,15 @@ const gameSlice = createSlice({
         state.lastDirection.y = normalizedY
       }
 
-      const targetVx = normalizedX * PLAYER_CRUISE_SPEED
-      const targetVy = normalizedY * PLAYER_CRUISE_SPEED
-      const steeringBlend = Math.min(1, STEERING_RESPONSE * frameScale)
+      const targetVx = normalizedX * config.cruiseSpeed
+      const targetVy = normalizedY * config.cruiseSpeed
+      const steeringBlend = Math.min(1, config.steeringResponse * frameScale)
 
       state.player.vx += (targetVx - state.player.vx) * steeringBlend
       state.player.vy += (targetVy - state.player.vy) * steeringBlend
 
       if (inputMagnitude === 0) {
-        const idleDamping = Math.pow(IDLE_DAMPING, frameScale)
+        const idleDamping = Math.pow(config.idleDamping, frameScale)
         state.player.vx *= idleDamping
         state.player.vy *= idleDamping
 
@@ -625,16 +1120,16 @@ const gameSlice = createSlice({
         const hasLastDirection =
           Math.abs(state.lastDirection.x) > 0 || Math.abs(state.lastDirection.y) > 0
 
-        if (hasLastDirection && driftSpeed > 0 && driftSpeed < MIN_DRIFT_SPEED) {
-          state.player.vx = state.lastDirection.x * MIN_DRIFT_SPEED
-          state.player.vy = state.lastDirection.y * MIN_DRIFT_SPEED
+        if (hasLastDirection && driftSpeed > 0 && driftSpeed < config.minDriftSpeed) {
+          state.player.vx = state.lastDirection.x * config.minDriftSpeed
+          state.player.vy = state.lastDirection.y * config.minDriftSpeed
         }
       }
 
       const currentSpeed = Math.hypot(state.player.vx, state.player.vy)
 
-      if (currentSpeed > MAX_PLAYER_SPEED && currentSpeed > 0) {
-        const ratio = MAX_PLAYER_SPEED / currentSpeed
+      if (currentSpeed > config.maxSpeed && currentSpeed > 0) {
+        const ratio = config.maxSpeed / currentSpeed
         state.player.vx *= ratio
         state.player.vy *= ratio
       }
@@ -652,7 +1147,7 @@ const gameSlice = createSlice({
         state.arenaWidth,
         state.arenaHeight,
         frameScale,
-        PLAYER_BOUNCE_DAMPING,
+        config.playerBounceDamping,
       )
 
       if (
@@ -670,7 +1165,7 @@ const gameSlice = createSlice({
       }
 
       const speed = Math.hypot(state.player.vx, state.player.vy)
-      state.windMode = speed >= TURBO_WIND_SPEED
+      state.windMode = speed >= config.windThreshold
 
       applySolarInfluence(state, frameScale)
       moveCollectible(state, state.spark, deltaMs, frameScale, speed)
@@ -683,7 +1178,25 @@ const gameSlice = createSlice({
       state.comet.impactMs = Math.max(0, state.comet.impactMs - deltaMs)
       state.home.impactMs = Math.max(0, state.home.impactMs - deltaMs)
       state.hazard.impactMs = Math.max(0, state.hazard.impactMs - deltaMs)
+      state.player.impactMs = Math.max(0, state.player.impactMs - deltaMs)
       state.planetChainMs = Math.max(0, state.planetChainMs - deltaMs)
+
+      if (state.invulnerabilityMs > 0) {
+        state.invulnerabilityMs = Math.max(0, state.invulnerabilityMs - deltaMs)
+      }
+
+      if (state.currentMission.kind === 'survive') {
+        progressMission(state, 'survive', deltaMs / 1000)
+      }
+
+      state.currentMission.timeLeftMs = Math.max(0, state.currentMission.timeLeftMs - deltaMs)
+
+      if (
+        state.currentMission.timeLeftMs === 0 &&
+        state.currentMission.progress < state.currentMission.target
+      ) {
+        failMission(state)
+      }
 
       if (state.comboTimerMs > 0) {
         state.comboTimerMs = Math.max(0, state.comboTimerMs - deltaMs)
@@ -700,6 +1213,26 @@ const gameSlice = createSlice({
           state.announcement = ''
         }
       }
+
+      if (state.learningFactTimerMs > 0) {
+        state.learningFactTimerMs = Math.max(0, state.learningFactTimerMs - deltaMs)
+
+        if (state.learningFactTimerMs === 0) {
+          state.learningFact = ''
+        }
+      }
+
+      if (state.settings.sessionReminderEnabled) {
+        state.sessionElapsedMs += deltaMs
+
+        if (state.sessionElapsedMs >= state.settings.sessionReminderMs) {
+          state.showBreakReminder = true
+          state.isPaused = true
+          setAnnouncement(state, 'Mola zamani! Su icip gozlerini dinlendirelim.', 1800)
+        }
+      }
+
+      checkUnlocksAndBadges(state)
     },
   },
 })
@@ -707,6 +1240,14 @@ const gameSlice = createSlice({
 export const {
   setArenaSize,
   setInput,
+  setDifficulty,
+  setControlSide,
+  setSoundVolume,
+  setVibrationEnabled,
+  setSessionReminderEnabled,
+  setSessionReminderMinutes,
+  dismissBreakReminder,
+  selectRocketSkin,
   nudgePlayer,
   stopPlayer,
   resetPlayerPosition,

@@ -164,6 +164,66 @@ body {
   filter: drop-shadow(0 0 16px rgb(251 113 133 / 0.9));
 }
 
+.player-ship--neon {
+  background: linear-gradient(145deg, #cffafe 0%, #5eead4 42%, #22d3ee 100%);
+  border-color: rgb(103 232 249 / 0.95);
+  box-shadow:
+    0 0 30px rgb(34 211 238 / 0.72),
+    inset 0 -7px 10px rgb(15 23 42 / 0.3);
+}
+
+.player-ship--neon::before {
+  background: linear-gradient(180deg, #ccfbf1 0%, #2dd4bf 100%);
+  border-color: rgb(153 246 228 / 0.9);
+  box-shadow: 0 0 16px rgb(45 212 191 / 0.72);
+}
+
+.player-ship--neon .player-ship__wing {
+  background: linear-gradient(135deg, #14b8a6 0%, #0e7490 100%);
+}
+
+.player-ship--comet {
+  background: linear-gradient(145deg, #f5f3ff 0%, #ddd6fe 34%, #a78bfa 100%);
+  border-color: rgb(221 214 254 / 0.95);
+  box-shadow:
+    0 0 28px rgb(196 181 253 / 0.72),
+    inset 0 -7px 10px rgb(49 46 129 / 0.35);
+}
+
+.player-ship--comet::before {
+  background: linear-gradient(180deg, #ede9fe 0%, #a78bfa 100%);
+  border-color: rgb(216 180 254 / 0.9);
+  box-shadow: 0 0 16px rgb(192 132 252 / 0.72);
+}
+
+.player-ship--comet .player-ship__wing {
+  background: linear-gradient(135deg, #8b5cf6 0%, #4c1d95 100%);
+}
+
+.player-ship--solar {
+  background: linear-gradient(145deg, #fef3c7 0%, #fbbf24 40%, #f97316 100%);
+  border-color: rgb(254 215 170 / 0.95);
+  box-shadow:
+    0 0 34px rgb(251 191 36 / 0.76),
+    inset 0 -7px 10px rgb(120 53 15 / 0.32);
+}
+
+.player-ship--solar::before {
+  background: linear-gradient(180deg, #fef9c3 0%, #facc15 100%);
+  border-color: rgb(254 240 138 / 0.9);
+  box-shadow: 0 0 18px rgb(250 204 21 / 0.75);
+}
+
+.player-ship--solar .player-ship__wing {
+  background: linear-gradient(135deg, #fb923c 0%, #c2410c 100%);
+}
+
+.player-ship--invulnerable {
+  animation:
+    shipHover 1.7s ease-in-out infinite,
+    shipBlink 520ms steps(2, start) infinite;
+}
+
 .planet {
   position: absolute;
   border-radius: 999px;
@@ -265,6 +325,10 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 0.95rem;
+}
+
+.touch-control-dock__inner--reverse {
+  flex-direction: row-reverse;
 }
 
 .tablet-touch-layout {
@@ -473,6 +537,17 @@ body {
 
   50% {
     transform: translateX(-50%) scaleY(1.16);
+  }
+}
+
+@keyframes shipBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.48;
   }
 }
 
