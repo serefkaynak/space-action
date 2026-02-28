@@ -18,6 +18,7 @@ import {
   setControlSide,
   setDifficulty,
   setInput,
+  setQuizEnabled,
   setSessionReminderEnabled,
   setSessionReminderMinutes,
   setSoundVolume,
@@ -605,6 +606,13 @@ function App() {
     top: `${game.hazard.y - game.hazard.radius}px`,
   }
 
+  const blackHoleStyle: CSSProperties = {
+    width: game.blackHole.radius * 2,
+    height: game.blackHole.radius * 2,
+    left: `${game.blackHole.x - game.blackHole.radius}px`,
+    top: `${game.blackHole.y - game.blackHole.radius}px`,
+  }
+
   const extraPlanetStyles = useMemo(
     () =>
       game.extraPlanets.map((planet) => ({
@@ -622,11 +630,18 @@ function App() {
     [game.extraPlanets],
   )
 
+  const playerStateClass =
+    game.blackHoleHitMs > 0
+      ? 'player-ship--blackhole-hit'
+      : game.invulnerabilityMs > 0
+        ? 'player-ship--invulnerable'
+        : ''
+
   const playerShipClass = [
     'player-ship absolute',
     `player-ship--${game.selectedSkin}`,
     game.windMode ? 'player-ship--boost' : '',
-    game.invulnerabilityMs > 0 ? 'player-ship--invulnerable' : '',
+    playerStateClass,
   ]
     .filter(Boolean)
     .join(' ')
@@ -678,6 +693,18 @@ function App() {
                   </button>
                 ))}
               </div>
+
+              <button
+                type="button"
+                className={
+                  game.settings.quizEnabled
+                    ? 'rounded-xl border border-emerald-200/35 bg-emerald-300/20 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-200/30'
+                    : 'rounded-xl border border-slate-200/25 bg-slate-700/40 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-600/55'
+                }
+                onClick={() => dispatch(setQuizEnabled(!game.settings.quizEnabled))}
+              >
+                Quiz: {game.settings.quizEnabled ? 'Acik' : 'Kapali'}
+              </button>
 
               <button
                 type="button"
@@ -737,6 +764,10 @@ function App() {
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-300">Gorev</p>
                   <p className="title-font text-xl text-cyan-100">{game.missionsCompleted}</p>
                 </div>
+                <div className="rounded-2xl border border-cyan-200/15 bg-cyan-200/10 px-3 py-3 text-center col-span-2">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-300">Karadelik</p>
+                  <p className="title-font text-base text-cyan-100">{game.blackHole.visible ? 'Aktif' : 'Henuz Yok'}</p>
+                </div>
               </div>
             </div>
 
@@ -772,7 +803,11 @@ function App() {
                   <p className="title-font text-lg text-amber-100">%{quizAccuracy}</p>
                 </div>
               </div>
-              <p className="mt-2 text-xs text-slate-300">Her 3 gezegen yakalamada mini quiz acilir.</p>
+              <p className="mt-2 text-xs text-slate-300">
+                {game.settings.quizEnabled
+                  ? 'Her 3 gezegen yakalamada mini quiz acilir.'
+                  : 'Quiz su an kapali. Ustteki Quiz butonundan tekrar acabilirsin.'}
+              </p>
             </div>
 
             <div className="glass-card rounded-3xl border border-cyan-200/20 px-4 py-4">
@@ -815,6 +850,13 @@ function App() {
                 />
               ))}
             </div>
+
+            {game.blackHole.visible ? (
+              <div
+                className={game.blackHole.pulseMs > 0 ? 'black-hole black-hole--pulse' : 'black-hole'}
+                style={blackHoleStyle}
+              />
+            ) : null}
 
             <div className={playerShipClass} style={playerStyle}>
               <div className="player-ship__window" />
@@ -1018,6 +1060,9 @@ function App() {
               </p>
               <p className="mt-1 text-sm text-slate-200">
                 <span className="font-semibold text-cyan-100">Tablet:</span> Joystick alanina dokunup surukle
+              </p>
+              <p className="mt-1 text-sm text-amber-100">
+                <span className="font-semibold text-amber-200">Karadelik:</span> Gezegenleri 5 sn icin yutar, roket girerse can gider.
               </p>
 
               <div

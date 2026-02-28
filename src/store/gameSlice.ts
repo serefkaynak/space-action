@@ -6,6 +6,11 @@ const DEFAULT_ARENA_HEIGHT = 540
 const PLAYER_RADIUS = 18
 const HOME_RADIUS = 34
 const HAZARD_RADIUS = 21
+const BLACK_HOLE_RADIUS = 28
+const BLACK_HOLE_RESPAWN_MS = 5000
+const BLACK_HOLE_VISIBLE_MS = 10 * 1000
+const BLACK_HOLE_INTERVAL_MS = 30 * 1000
+const BLACK_HOLE_FIRST_DELAY_MS = 6000
 
 const COMBO_WINDOW_MS = 3200
 const SHIELD_INVULNERABILITY_MS = 1800
@@ -66,6 +71,17 @@ type Hazard = DynamicEntity & {
   active: boolean
 }
 
+type BlackHole = {
+  x: number
+  y: number
+  radius: number
+  active: boolean
+  visible: boolean
+  pulseMs: number
+  visibleMs: number
+  nextSpawnMs: number
+}
+
 type ExtraPlanetId = 'mercury' | 'venus' | 'saturn' | 'uranus' | 'neptune'
 
 type ExtraPlanet = DynamicEntity & {
@@ -79,6 +95,7 @@ type ParentSettings = {
   vibrationEnabled: boolean
   sessionReminderEnabled: boolean
   sessionReminderMs: number
+  quizEnabled: boolean
 }
 
 type MissionState = {
@@ -165,6 +182,8 @@ type DifficultyConfig = {
   hazardLevelBoostPerLevel: number
   impactImpulseScale: number
   solarInfluence: number
+  blackHoleUnlockScore: number
+  blackHolePullStrength: number
   levelScoreStep: number
   missionTargetScale: number
   missionRewardScale: number
@@ -197,6 +216,8 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     hazardLevelBoostPerLevel: 0.03,
     impactImpulseScale: 0.55,
     solarInfluence: 0.5,
+    blackHoleUnlockScore: 270,
+    blackHolePullStrength: 0.7,
     levelScoreStep: 230,
     missionTargetScale: 0.85,
     missionRewardScale: 1,
@@ -227,6 +248,8 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     hazardLevelBoostPerLevel: 0.036,
     impactImpulseScale: 0.64,
     solarInfluence: 0.62,
+    blackHoleUnlockScore: 220,
+    blackHolePullStrength: 0.85,
     levelScoreStep: 200,
     missionTargetScale: 1,
     missionRewardScale: 1.12,
@@ -257,6 +280,8 @@ const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
     hazardLevelBoostPerLevel: 0.045,
     impactImpulseScale: 0.74,
     solarInfluence: 0.8,
+    blackHoleUnlockScore: 180,
+    blackHolePullStrength: 1,
     levelScoreStep: 170,
     missionTargetScale: 1.2,
     missionRewardScale: 1.28,
@@ -466,6 +491,7 @@ export type GameState = {
   comet: Collectible
   home: HomePortal
   hazard: Hazard
+  blackHole: BlackHole
   extraPlanets: ExtraPlanet[]
   score: number
   highScore: number
@@ -475,6 +501,7 @@ export type GameState = {
   lives: number
   shieldCharges: number
   invulnerabilityMs: number
+  blackHoleHitMs: number
   secondChanceUsed: boolean
   windMode: boolean
   isPaused: boolean
@@ -593,6 +620,21 @@ function createHazard(width: number, height: number, spawnSpeed: number): Hazard
   }
 }
 
+function createBlackHole(width: number, height: number): BlackHole {
+  const position = randomPosition(width, height, BLACK_HOLE_RADIUS)
+
+  return {
+    x: position.x,
+    y: position.y,
+    radius: BLACK_HOLE_RADIUS,
+    active: false,
+    visible: false,
+    pulseMs: 0,
+    visibleMs: 0,
+    nextSpawnMs: BLACK_HOLE_FIRST_DELAY_MS,
+  }
+}
+
 function createExtraPlanets(
   width: number,
   height: number,
@@ -690,6 +732,7 @@ function createInitialState(): GameState {
     ),
     home: createHome(config.sunPoints, config.sunThreshold, DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
     hazard: createHazard(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT, config.hazardSpawnSpeed),
+    blackHole: createBlackHole(DEFAULT_ARENA_WIDTH, DEFAULT_ARENA_HEIGHT),
     extraPlanets: createExtraPlanets(
       DEFAULT_ARENA_WIDTH,
       DEFAULT_ARENA_HEIGHT,
@@ -703,6 +746,7 @@ function createInitialState(): GameState {
     lives: config.baseLives,
     shieldCharges: config.baseShieldCharges,
     invulnerabilityMs: 0,
+    blackHoleHitMs: 0,
     secondChanceUsed: false,
     windMode: false,
     isPaused: false,
@@ -734,6 +778,7 @@ function createInitialState(): GameState {
       vibrationEnabled: true,
       sessionReminderEnabled: true,
       sessionReminderMs: DEFAULT_SESSION_REMINDER_MS,
+      quizEnabled: true,
     },
     sessionElapsedMs: 0,
     showBreakReminder: false,
@@ -809,7 +854,12 @@ function createQuizQuestion(planet: PlanetKnowledgeKey, askedCount: number): Qui
 }
 
 function maybeTriggerQuiz(state: GameState, planet: PlanetKnowledgeKey) {
-  if (state.quiz.active || state.isGameOver || state.showBreakReminder) {
+  if (
+    !state.settings.quizEnabled ||
+    state.quiz.active ||
+    state.isGameOver ||
+    state.showBreakReminder
+  ) {
     return
   }
 
@@ -1000,6 +1050,10 @@ function triggerPlanetImpact(state: GameState, source: PlanetImpactSource) {
   const movingBodies = getMovingPlanets(state)
 
   for (const entity of movingBodies) {
+    if (!entity.visible) {
+      continue
+    }
+
     const dx = entity.x - sourcePosition.x
     const dy = entity.y - sourcePosition.y
     const distance = Math.hypot(dx, dy)
@@ -1023,6 +1077,10 @@ function applySolarInfluence(state: GameState, frameScale: number) {
   const movingBodies = getMovingPlanets(state)
 
   for (const entity of movingBodies) {
+    if (!entity.visible) {
+      continue
+    }
+
     const dx = state.home.x - entity.x
     const dy = state.home.y - entity.y
     const distance = Math.hypot(dx, dy)
@@ -1053,6 +1111,54 @@ function clampVelocity(entity: DynamicEntity, maxSpeed: number) {
   const ratio = maxSpeed / speed
   entity.vx *= ratio
   entity.vy *= ratio
+}
+
+function tickHiddenDynamicEntity(
+  entity: DynamicEntity,
+  deltaMs: number,
+  width: number,
+  height: number,
+  spawnSpeed: number,
+) {
+  if (entity.visible) {
+    return false
+  }
+
+  entity.cooldownMs = Math.max(0, entity.cooldownMs - deltaMs)
+
+  if (entity.cooldownMs > 0) {
+    return true
+  }
+
+  const respawnPosition = randomPosition(width, height, entity.radius)
+  entity.x = respawnPosition.x
+  entity.y = respawnPosition.y
+  entity.vx = randomBetween(-spawnSpeed, spawnSpeed)
+  entity.vy = randomBetween(-spawnSpeed, spawnSpeed)
+  entity.visible = true
+  entity.impactMs = Math.max(entity.impactMs, 220)
+
+  return false
+}
+
+function tickHiddenHome(home: HomePortal, deltaMs: number, width: number, height: number) {
+  if (home.visible) {
+    return false
+  }
+
+  home.cooldownMs = Math.max(0, home.cooldownMs - deltaMs)
+
+  if (home.cooldownMs > 0) {
+    return true
+  }
+
+  const respawnPosition = randomPosition(width, height, home.radius)
+  home.x = respawnPosition.x
+  home.y = respawnPosition.y
+  home.visible = true
+  home.impactMs = Math.max(home.impactMs, 220)
+
+  return false
 }
 
 function bounceInsideArena(
@@ -1140,6 +1246,192 @@ function resolvePlanetCollisions(state: GameState) {
   }
 }
 
+function applyBlackHoleGravity(state: GameState, frameScale: number) {
+  const config = getDifficultyConfig(state.difficulty)
+  const movingBodies = getMovingPlanets(state)
+
+  for (const entity of movingBodies) {
+    if (!entity.visible) {
+      continue
+    }
+
+    const dx = state.blackHole.x - entity.x
+    const dy = state.blackHole.y - entity.y
+    const distance = Math.hypot(dx, dy)
+
+    if (distance < 1) {
+      continue
+    }
+
+    const nx = dx / distance
+    const ny = dy / distance
+    const gravity =
+      Math.min(0.26, 2000 / Math.max(700, distance * distance)) *
+      frameScale *
+      config.blackHolePullStrength
+
+    entity.vx += nx * gravity
+    entity.vy += ny * gravity
+  }
+
+  const playerDx = state.blackHole.x - state.player.x
+  const playerDy = state.blackHole.y - state.player.y
+  const playerDistance = Math.hypot(playerDx, playerDy)
+
+  if (playerDistance > 1) {
+    const nx = playerDx / playerDistance
+    const ny = playerDy / playerDistance
+    const playerGravity =
+      Math.min(0.2, 1700 / Math.max(700, playerDistance * playerDistance)) *
+      frameScale *
+      config.blackHolePullStrength
+    state.player.vx += nx * playerGravity
+    state.player.vy += ny * playerGravity
+  }
+}
+
+function swallowDynamicEntity(
+  entity: DynamicEntity,
+  state: GameState,
+  cooldownMs = BLACK_HOLE_RESPAWN_MS,
+) {
+  entity.visible = false
+  entity.cooldownMs = cooldownMs
+  entity.impactMs = Math.max(entity.impactMs, 260)
+  state.blackHole.pulseMs = Math.max(state.blackHole.pulseMs, 460)
+}
+
+function swallowHomeEntity(state: GameState, cooldownMs = BLACK_HOLE_RESPAWN_MS) {
+  state.home.visible = false
+  state.home.cooldownMs = cooldownMs
+  state.home.impactMs = Math.max(state.home.impactMs, 260)
+  state.blackHole.pulseMs = Math.max(state.blackHole.pulseMs, 460)
+}
+
+function updateBlackHoleCycle(state: GameState, deltaMs: number) {
+  const config = getDifficultyConfig(state.difficulty)
+  const unlocked = state.score >= config.blackHoleUnlockScore
+
+  if (!unlocked) {
+    state.blackHole.active = false
+    state.blackHole.visible = false
+    state.blackHole.pulseMs = 0
+    state.blackHole.visibleMs = 0
+    state.blackHole.nextSpawnMs = BLACK_HOLE_FIRST_DELAY_MS
+    return
+  }
+
+  if (state.blackHole.visible) {
+    state.blackHole.visibleMs = Math.max(0, state.blackHole.visibleMs - deltaMs)
+
+    if (state.blackHole.visibleMs === 0) {
+      state.blackHole.active = false
+      state.blackHole.visible = false
+      state.blackHole.nextSpawnMs = BLACK_HOLE_INTERVAL_MS
+      setAnnouncement(state, 'Karadelik kayboldu. 30 saniye sonra geri gelebilir.', 1600)
+    }
+
+    return
+  }
+
+  state.blackHole.nextSpawnMs = Math.max(0, state.blackHole.nextSpawnMs - deltaMs)
+
+  if (state.blackHole.nextSpawnMs > 0) {
+    return
+  }
+
+  if (!state.blackHole.visible) {
+    const spawnPosition = randomPosition(state.arenaWidth, state.arenaHeight, state.blackHole.radius)
+    state.blackHole.x = spawnPosition.x
+    state.blackHole.y = spawnPosition.y
+    state.blackHole.active = true
+    state.blackHole.visible = true
+    state.blackHole.visibleMs = BLACK_HOLE_VISIBLE_MS
+    state.blackHole.pulseMs = 520
+    setAnnouncement(state, 'Karadelik belirdi! 10 saniye aktif kalacak.', 1800)
+  }
+}
+
+function handleBlackHoleInteractions(state: GameState) {
+  if (!state.blackHole.visible) {
+    return
+  }
+
+  let swallowedBodies = 0
+  const holeRange = state.blackHole.radius * 0.76
+
+  if (state.spark.visible && getDistance(state.spark, state.blackHole) <= holeRange + state.spark.radius) {
+    swallowDynamicEntity(state.spark, state)
+    swallowedBodies += 1
+  }
+
+  if (state.comet.visible && getDistance(state.comet, state.blackHole) <= holeRange + state.comet.radius) {
+    swallowDynamicEntity(state.comet, state)
+    swallowedBodies += 1
+  }
+
+  if (state.home.visible && getDistance(state.home, state.blackHole) <= holeRange + state.home.radius) {
+    swallowHomeEntity(state)
+    swallowedBodies += 1
+  }
+
+  if (state.hazard.visible && getDistance(state.hazard, state.blackHole) <= holeRange + state.hazard.radius) {
+    swallowDynamicEntity(state.hazard, state)
+    swallowedBodies += 1
+  }
+
+  for (const planet of state.extraPlanets) {
+    if (!planet.visible) {
+      continue
+    }
+
+    if (getDistance(planet, state.blackHole) <= holeRange + planet.radius) {
+      swallowDynamicEntity(planet, state)
+      swallowedBodies += 1
+    }
+  }
+
+  if (swallowedBodies > 0) {
+    setAnnouncement(state, `Karadelik ${swallowedBodies} gezegeni yuttu!`, 1400)
+  }
+
+  const playerInHole =
+    getDistance(state.player, state.blackHole) <= holeRange + state.player.radius * 0.85
+
+  if (playerInHole && state.invulnerabilityMs <= 0) {
+    state.blackHole.pulseMs = Math.max(state.blackHole.pulseMs, 620)
+    state.blackHoleHitMs = 760
+    state.player.impactMs = Math.max(state.player.impactMs, 700)
+    state.player.x = state.arenaWidth / 2
+    state.player.y = state.arenaHeight / 2
+    state.player.vx = 0
+    state.player.vy = 0
+    state.input = { x: 0, y: 0 }
+
+    state.lives -= 1
+    state.combo = 1
+    state.comboTimerMs = 0
+    state.invulnerabilityMs = Math.max(HIT_INVULNERABILITY_MS + 700, state.invulnerabilityMs)
+    incrementEvent(state, 'hit')
+    setAnnouncement(state, 'Karadelige girdin! 1 can kaybettin.', 1800)
+
+    if (state.lives <= 0) {
+      if (!state.secondChanceUsed) {
+        state.secondChanceUsed = true
+        state.lives = 1
+        state.shieldCharges = Math.max(state.shieldCharges, 1)
+        state.invulnerabilityMs = 2600
+        incrementEvent(state, 'shield')
+        setAnnouncement(state, 'Son sans devrede! Karadelikten kurtuldun.', 1900)
+      } else {
+        state.isGameOver = true
+        state.isPaused = true
+        setAnnouncement(state, 'Karadelik gorevi bitirdi. Yeniden basla.', 2500)
+      }
+    }
+  }
+}
+
 function setupRound(state: GameState, message: string) {
   const config = getDifficultyConfig(state.difficulty)
   const width = state.arenaWidth
@@ -1179,6 +1471,7 @@ function setupRound(state: GameState, message: string) {
   )
   state.home = createHome(config.sunPoints, config.sunThreshold, width, height)
   state.hazard = createHazard(width, height, config.hazardSpawnSpeed)
+  state.blackHole = createBlackHole(width, height)
   state.extraPlanets = createExtraPlanets(width, height, config.planetSpawnSpeed)
 
   state.score = 0
@@ -1188,6 +1481,7 @@ function setupRound(state: GameState, message: string) {
   state.lives = config.baseLives
   state.shieldCharges = config.baseShieldCharges
   state.invulnerabilityMs = 0
+  state.blackHoleHitMs = 0
   state.secondChanceUsed = false
   state.windMode = false
   state.isPaused = false
@@ -1234,6 +1528,19 @@ function moveCollectible(
   frameScale: number,
 ) {
   const config = getDifficultyConfig(state.difficulty)
+
+  if (
+    tickHiddenDynamicEntity(
+      collectible,
+      deltaMs,
+      state.arenaWidth,
+      state.arenaHeight,
+      config.planetSpawnSpeed,
+    )
+  ) {
+    return
+  }
+
   collectible.visible = true
 
   const levelBoost = 0.9 + (state.level - 1) * config.planetLevelBoostPerLevel
@@ -1318,6 +1625,18 @@ function moveExtraPlanets(state: GameState, deltaMs: number, frameScale: number)
   const config = getDifficultyConfig(state.difficulty)
 
   for (const planet of state.extraPlanets) {
+    if (
+      tickHiddenDynamicEntity(
+        planet,
+        deltaMs,
+        state.arenaWidth,
+        state.arenaHeight,
+        config.planetSpawnSpeed * planet.speedFactor,
+      )
+    ) {
+      continue
+    }
+
     planet.visible = true
 
     const levelBoost = 0.88 + (state.level - 1) * config.planetLevelBoostPerLevel
@@ -1349,6 +1668,10 @@ function moveExtraPlanets(state: GameState, deltaMs: number, frameScale: number)
 }
 
 function moveHome(state: GameState, deltaMs: number) {
+  if (tickHiddenHome(state.home, deltaMs, state.arenaWidth, state.arenaHeight)) {
+    return
+  }
+
   state.home.visible = true
 
   if (state.home.cooldownMs > 0) {
@@ -1379,6 +1702,19 @@ function moveHazard(state: GameState, deltaMs: number, frameScale: number) {
   const config = getDifficultyConfig(state.difficulty)
 
   state.hazard.active = true
+
+  if (
+    tickHiddenDynamicEntity(
+      state.hazard,
+      deltaMs,
+      state.arenaWidth,
+      state.arenaHeight,
+      config.hazardSpawnSpeed,
+    )
+  ) {
+    return
+  }
+
   state.hazard.visible = true
 
   const levelBoost =
@@ -1482,6 +1818,17 @@ const gameSlice = createSlice({
       state.hazard.x = clampPosition(state.hazard.x, state.hazard.radius, width - state.hazard.radius)
       state.hazard.y = clampPosition(state.hazard.y, state.hazard.radius, height - state.hazard.radius)
 
+      state.blackHole.x = clampPosition(
+        state.blackHole.x,
+        state.blackHole.radius,
+        width - state.blackHole.radius,
+      )
+      state.blackHole.y = clampPosition(
+        state.blackHole.y,
+        state.blackHole.radius,
+        height - state.blackHole.radius,
+      )
+
       for (const planet of state.extraPlanets) {
         planet.x = clampPosition(planet.x, planet.radius, width - planet.radius)
         planet.y = clampPosition(planet.y, planet.radius, height - planet.radius)
@@ -1518,6 +1865,24 @@ const gameSlice = createSlice({
     setSessionReminderMinutes: (state, action: PayloadAction<number>) => {
       const safeMinutes = Math.max(10, Math.min(45, Math.round(action.payload)))
       state.settings.sessionReminderMs = safeMinutes * 60 * 1000
+    },
+    setQuizEnabled: (state, action: PayloadAction<boolean>) => {
+      state.settings.quizEnabled = action.payload
+
+      if (!action.payload) {
+        state.quiz.active = false
+        state.quiz.question = null
+        state.quiz.pendingTrigger = 0
+        state.quiz.streak = 0
+
+        if (!state.isGameOver && !state.showBreakReminder) {
+          state.isPaused = false
+        }
+
+        setAnnouncement(state, 'Bilim Quiz kapatildi.', 1100)
+      } else {
+        setAnnouncement(state, 'Bilim Quiz acildi.', 1100)
+      }
     },
     dismissBreakReminder: (state) => {
       state.showBreakReminder = false
@@ -1713,12 +2078,17 @@ const gameSlice = createSlice({
       const speed = Math.hypot(state.player.vx, state.player.vy)
       state.windMode = speed >= config.windThreshold
 
+      updateBlackHoleCycle(state, deltaMs)
       applySolarInfluence(state, frameScale)
+      if (state.blackHole.visible) {
+        applyBlackHoleGravity(state, frameScale)
+      }
       moveCollectible(state, state.spark, deltaMs, frameScale)
       moveCollectible(state, state.comet, deltaMs, frameScale)
       moveExtraPlanets(state, deltaMs, frameScale)
       moveHome(state, deltaMs)
       moveHazard(state, deltaMs, frameScale)
+      handleBlackHoleInteractions(state)
       resolvePlanetCollisions(state)
 
       state.spark.impactMs = Math.max(0, state.spark.impactMs - deltaMs)
@@ -1730,6 +2100,8 @@ const gameSlice = createSlice({
       }
       state.player.impactMs = Math.max(0, state.player.impactMs - deltaMs)
       state.planetChainMs = Math.max(0, state.planetChainMs - deltaMs)
+      state.blackHole.pulseMs = Math.max(0, state.blackHole.pulseMs - deltaMs)
+      state.blackHoleHitMs = Math.max(0, state.blackHoleHitMs - deltaMs)
 
       if (state.invulnerabilityMs > 0) {
         state.invulnerabilityMs = Math.max(0, state.invulnerabilityMs - deltaMs)
@@ -1796,6 +2168,7 @@ export const {
   setVibrationEnabled,
   setSessionReminderEnabled,
   setSessionReminderMinutes,
+  setQuizEnabled,
   dismissBreakReminder,
   selectRocketSkin,
   answerQuiz,

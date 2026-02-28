@@ -245,6 +245,9 @@
   .order-3 {
     order: 3;
   }
+  .col-span-2 {
+    grid-column: span 2 / span 2;
+  }
   .mx-auto {
     margin-inline: auto;
   }
@@ -522,6 +525,12 @@
       border-color: color-mix(in oklab, var(--color-rose-200) 35%, transparent);
     }
   }
+  .border-slate-200\/25 {
+    border-color: color-mix(in srgb, oklch(92.9% 0.013 255.508) 25%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-slate-200) 25%, transparent);
+    }
+  }
   .border-slate-300\/25 {
     border-color: color-mix(in srgb, oklch(86.9% 0.022 252.894) 25%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -622,6 +631,12 @@
     background-color: color-mix(in srgb, oklch(37.2% 0.044 257.287) 30%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-slate-700) 30%, transparent);
+    }
+  }
+  .bg-slate-700\/40 {
+    background-color: color-mix(in srgb, oklch(37.2% 0.044 257.287) 40%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-slate-700) 40%, transparent);
     }
   }
   .bg-slate-700\/55 {
@@ -846,6 +861,9 @@
       color: color-mix(in oklab, var(--color-amber-100) 75%, transparent);
     }
   }
+  .text-amber-200 {
+    color: var(--color-amber-200);
+  }
   .text-cyan-50 {
     color: var(--color-cyan-50);
   }
@@ -1020,6 +1038,16 @@
         background-color: color-mix(in srgb, oklch(90.5% 0.093 164.15) 30%, transparent);
         @supports (color: color-mix(in lab, red, red)) {
           background-color: color-mix(in oklab, var(--color-emerald-200) 30%, transparent);
+        }
+      }
+    }
+  }
+  .hover\:bg-slate-600\/55 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: color-mix(in srgb, oklch(44.6% 0.043 257.281) 55%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, var(--color-slate-600) 55%, transparent);
         }
       }
     }
