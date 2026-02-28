@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   nudgePlayer,
   resetPlayerPosition,
@@ -23,6 +23,14 @@ type ControlButtonProps = {
   onPress: (direction: { x: number; y: number }) => void
 }
 
+type JoystickThumb = {
+  x: number
+  y: number
+}
+
+const JOYSTICK_MAX_OFFSET = 58
+const JOYSTICK_DEADZONE = 0.15
+
 function ControlButton({ label, direction, onPress }: ControlButtonProps) {
   return (
     <button
@@ -41,7 +49,10 @@ function App() {
   const dispatch = useAppDispatch()
   const game = useAppSelector((state) => state.game)
   const arenaRef = useRef<HTMLDivElement | null>(null)
+  const joystickRef = useRef<HTMLDivElement | null>(null)
   const [menu, setMenu] = useState<ContextMenuState>({ open: false, x: 0, y: 0 })
+  const [joystickActive, setJoystickActive] = useState(false)
+  const [joystickThumb, setJoystickThumb] = useState<JoystickThumb>({ x: 0, y: 0 })
 
   const speed = useMemo(
     () => Number(Math.hypot(game.player.vx, game.player.vy).toFixed(1)),
@@ -217,6 +228,81 @@ function App() {
     [game.arenaHeight, game.arenaWidth, menu.x, menu.y],
   )
 
+  const resetJoystickInput = () => {
+    setJoystickActive(false)
+    setJoystickThumb({ x: 0, y: 0 })
+    dispatch(setInput({ x: 0, y: 0 }))
+  }
+
+  const updateJoystickInput = (clientX: number, clientY: number) => {
+    if (!joystickRef.current || game.isPaused || game.isGameOver) {
+      return
+    }
+
+    const rect = joystickRef.current.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+
+    const rawX = clientX - centerX
+    const rawY = clientY - centerY
+    const distance = Math.hypot(rawX, rawY)
+    const clampedDistance = Math.min(distance, JOYSTICK_MAX_OFFSET)
+    const scale = distance > 0 ? clampedDistance / distance : 0
+
+    const clampedX = rawX * scale
+    const clampedY = rawY * scale
+
+    setJoystickThumb({ x: clampedX, y: clampedY })
+
+    const normalizedX = clampedX / JOYSTICK_MAX_OFFSET
+    const normalizedY = clampedY / JOYSTICK_MAX_OFFSET
+    const magnitude = Math.hypot(normalizedX, normalizedY)
+
+    if (magnitude < JOYSTICK_DEADZONE) {
+      dispatch(setInput({ x: 0, y: 0 }))
+      return
+    }
+
+    dispatch(setInput({ x: normalizedX, y: normalizedY }))
+  }
+
+  const handleJoystickPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (game.isPaused || game.isGameOver) {
+      return
+    }
+
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setJoystickActive(true)
+    updateJoystickInput(event.clientX, event.clientY)
+  }
+
+  const handleJoystickPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!joystickActive) {
+      return
+    }
+
+    event.preventDefault()
+    updateJoystickInput(event.clientX, event.clientY)
+  }
+
+  const handleJoystickPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    resetJoystickInput()
+  }
+
+  const joystickThumbStyle = useMemo<CSSProperties>(
+    () => ({
+      transform: `translate(calc(-50% + ${joystickThumb.x}px), calc(-50% + ${joystickThumb.y}px))`,
+    }),
+    [joystickThumb.x, joystickThumb.y],
+  )
+
   const stageClass = game.windMode
     ? 'game-stage game-stage--wind relative h-[62vh] min-h-[340px] max-h-[640px] w-full overflow-hidden rounded-[30px] border border-amber-300/35 bg-[radial-gradient(circle_at_18%_16%,_rgba(251,191,36,0.28),_transparent_44%),radial-gradient(circle_at_76%_2%,_rgba(251,146,60,0.22),_transparent_40%),linear-gradient(160deg,_rgba(30,58,138,0.88),_rgba(15,23,42,0.95))] shadow-[0_24px_90px_rgba(30,64,175,0.45)]'
     : 'game-stage relative h-[62vh] min-h-[340px] max-h-[640px] w-full overflow-hidden rounded-[30px] border border-cyan-300/25 bg-[radial-gradient(circle_at_25%_20%,_rgba(14,116,144,0.4),_transparent_44%),radial-gradient(circle_at_80%_0%,_rgba(251,146,60,0.22),_transparent_42%),linear-gradient(160deg,_rgba(2,6,23,0.95),_rgba(15,23,42,0.92))] shadow-[0_24px_90px_rgba(8,47,73,0.55)]'
@@ -275,7 +361,10 @@ function App() {
               <button
                 type="button"
                 className="rounded-xl border border-cyan-100/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-200/20"
-                onClick={() => dispatch(togglePause())}
+                onClick={() => {
+                  resetJoystickInput()
+                  dispatch(togglePause())
+                }}
               >
                 {game.isPaused ? 'Devam Et' : 'Duraklat'}
               </button>
@@ -444,6 +533,7 @@ function App() {
                   type="button"
                   className="w-full rounded-lg px-2 py-1.5 text-left transition hover:bg-cyan-200/15"
                   onClick={() => {
+                    resetJoystickInput()
                     dispatch(togglePause())
                     setMenu((current) => ({ ...current, open: false }))
                   }}
@@ -460,14 +550,58 @@ function App() {
               <p className="mt-2 text-sm text-slate-200"><span className="font-semibold text-cyan-100">Ok Tuşları / WASD:</span> Roketi yönlendir</p>
               <p className="mt-1 text-sm text-slate-200"><span className="font-semibold text-cyan-100">Boşluk:</span> Gemiyi durdur</p>
               <p className="mt-1 text-sm text-slate-200"><span className="font-semibold text-cyan-100">P:</span> Duraklat / devam</p>
+              <p className="mt-1 text-sm text-slate-200"><span className="font-semibold text-cyan-100">Tablet:</span> Joystick alanına dokunup sürükle</p>
 
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="desktop-dpad mt-3 grid grid-cols-3 gap-2">
                 <div />
                 <ControlButton label="↑" direction={{ x: 0, y: -1 }} onPress={(vector) => dispatch(nudgePlayer(vector))} />
                 <div />
                 <ControlButton label="←" direction={{ x: -1, y: 0 }} onPress={(vector) => dispatch(nudgePlayer(vector))} />
                 <ControlButton label="↓" direction={{ x: 0, y: 1 }} onPress={(vector) => dispatch(nudgePlayer(vector))} />
                 <ControlButton label="→" direction={{ x: 1, y: 0 }} onPress={(vector) => dispatch(nudgePlayer(vector))} />
+              </div>
+
+              <div className="tablet-touch-controls mt-4">
+                <div className="tablet-touch-layout">
+                  <div
+                    ref={joystickRef}
+                    className={joystickActive ? 'virtual-joystick virtual-joystick--active' : 'virtual-joystick'}
+                    onPointerDown={handleJoystickPointerDown}
+                    onPointerMove={handleJoystickPointerMove}
+                    onPointerUp={handleJoystickPointerUp}
+                    onPointerCancel={handleJoystickPointerUp}
+                  >
+                    <div className="virtual-joystick__rings" />
+                    <div className="virtual-joystick__thumb" style={joystickThumbStyle} />
+                  </div>
+
+                  <div className="tablet-action-stack">
+                    <button
+                      type="button"
+                      className="tablet-action-button"
+                      onClick={() => dispatch(stopPlayer())}
+                    >
+                      Gemiyi Durdur
+                    </button>
+                    <button
+                      type="button"
+                      className="tablet-action-button"
+                      onClick={() => dispatch(resetPlayerPosition())}
+                    >
+                      Merkeze Al
+                    </button>
+                    <button
+                      type="button"
+                      className="tablet-action-button"
+                      onClick={() => {
+                        resetJoystickInput()
+                        dispatch(togglePause())
+                      }}
+                    >
+                      {game.isPaused ? 'Devam Et' : 'Duraklat'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 

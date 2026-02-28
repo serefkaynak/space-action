@@ -218,6 +218,122 @@ body {
   animation: stationPulse 1.05s ease-in-out infinite;
 }
 
+.tablet-touch-controls {
+  display: none;
+}
+
+.tablet-touch-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.virtual-joystick {
+  position: relative;
+  width: 170px;
+  height: 170px;
+  border-radius: 999px;
+  border: 1px solid rgb(165 243 252 / 0.45);
+  background:
+    radial-gradient(circle at 30% 30%, rgb(125 211 252 / 0.15), transparent 52%),
+    linear-gradient(165deg, rgb(8 47 73 / 0.7), rgb(2 6 23 / 0.75));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 8px 22px rgb(15 23 42 / 0.45);
+  touch-action: none;
+  user-select: none;
+}
+
+.virtual-joystick__rings {
+  position: absolute;
+  inset: 12%;
+  border-radius: 999px;
+  border: 1px dashed rgb(103 232 249 / 0.28);
+}
+
+.virtual-joystick__rings::before,
+.virtual-joystick__rings::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgb(103 232 249 / 0.24);
+  transform: translate(-50%, -50%);
+}
+
+.virtual-joystick__rings::before {
+  width: 72%;
+  height: 1px;
+}
+
+.virtual-joystick__rings::after {
+  width: 1px;
+  height: 72%;
+}
+
+.virtual-joystick__thumb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  border: 2px solid rgb(224 242 254 / 0.9);
+  background: linear-gradient(145deg, rgb(186 230 253 / 0.8), rgb(56 189 248 / 0.65));
+  box-shadow:
+    0 0 16px rgb(56 189 248 / 0.55),
+    inset 0 -4px 8px rgb(12 74 110 / 0.5);
+  transform: translate(-50%, -50%);
+  transition: transform 45ms linear;
+}
+
+.virtual-joystick--active .virtual-joystick__thumb {
+  box-shadow:
+    0 0 22px rgb(34 211 238 / 0.82),
+    inset 0 -4px 8px rgb(8 47 73 / 0.6);
+}
+
+.tablet-action-stack {
+  display: flex;
+  min-width: 130px;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.tablet-action-button {
+  border-radius: 0.8rem;
+  border: 1px solid rgb(186 230 253 / 0.32);
+  background: rgb(125 211 252 / 0.1);
+  padding: 0.5rem 0.8rem;
+  color: rgb(224 242 254 / 0.95);
+  font-size: 0.88rem;
+  font-weight: 600;
+  touch-action: manipulation;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .tablet-touch-controls {
+    display: block;
+  }
+
+  .desktop-dpad {
+    display: none;
+  }
+}
+
+@media (max-width: 880px) {
+  .virtual-joystick {
+    width: 150px;
+    height: 150px;
+  }
+
+  .virtual-joystick__thumb {
+    width: 56px;
+    height: 56px;
+  }
+}
+
 @keyframes entryRise {
   from {
     opacity: 0;
